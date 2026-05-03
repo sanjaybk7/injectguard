@@ -48,7 +48,7 @@ jobs:
       - name: Scan our own fixtures (must find issues)
         run: |
           set +e
-          injectguard scan tests/fixtures/vulnerable --format json -o findings.json
+          injectguard scan tests/fixtures/vulnerable --include-tests --format json -o findings.json
           rc=$?
           set -e
           # We expect a non-zero exit because the vulnerable fixtures should fire IG001/IG002.
