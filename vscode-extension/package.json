@@ -1,0 +1,58 @@
+{
+  "name": "injectguard",
+  "displayName": "injectguard",
+  "description": "Static analyzer for prompt-injection and confused-deputy risks in LLM agent code.",
+  "version": "0.1.0",
+  "publisher": "sanjaybk7",
+  "license": "Apache-2.0",
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": ["Linters", "Other"],
+  "keywords": ["security", "ai", "agents", "prompt-injection", "owasp", "langgraph"],
+  "activationEvents": ["onLanguage:python"],
+  "main": "./out/extension.js",
+  "contributes": {
+    "configuration": {
+      "title": "injectguard",
+      "properties": {
+        "injectguard.cliPath": {
+          "type": "string",
+          "default": "injectguard",
+          "description": "Path to the injectguard CLI executable. Defaults to looking it up on PATH."
+        },
+        "injectguard.runOn": {
+          "type": "string",
+          "enum": ["save", "manual"],
+          "default": "save",
+          "description": "When to run the scanner."
+        }
+      }
+    },
+    "commands": [
+      {
+        "command": "injectguard.scanWorkspace",
+        "title": "injectguard: Scan workspace"
+      },
+      {
+        "command": "injectguard.scanFile",
+        "title": "injectguard: Scan current file"
+      }
+    ]
+  },
+  "scripts": {
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "@types/vscode": "^1.85.0",
+    "typescript": "^5.3.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sanjaybk7/injectguard.git"
+  }
+}

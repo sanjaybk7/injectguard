@@ -1,0 +1,70 @@
+name: "injectguard"
+description: "Static analyzer for prompt-injection and confused-deputy risks in LLM agent code."
+author: "sanjaybk7"
+branding:
+  icon: "shield"
+  color: "red"
+
+inputs:
+  path:
+    description: "File or directory to scan."
+    required: false
+    default: "."
+  fail-on:
+    description: "Minimum severity to fail the job. One of: critical, high, medium, low, info, none."
+    required: false
+    default: "high"
+  sarif-file:
+    description: "Where to write the SARIF report."
+    required: false
+    default: "injectguard.sarif"
+  upload-sarif:
+    description: "If true, uploads the SARIF report to GitHub code scanning."
+    required: false
+    default: "true"
+
+outputs:
+  sarif-file:
+    description: "Path to the generated SARIF file."
+    value: ${{ steps.scan.outputs.sarif-file }}
+
+runs:
+  using: "composite"
+  steps:
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install injectguard
+      shell: bash
+      run: |
+        python -m pip install --upgrade pip
+        # Install from the action's repo so users always get a known-good version.
+        pip install "injectguard @ git+https://github.com/sanjaybk7/injectguard.git@main"
+
+    - name: Scan
+      id: scan
+      shell: bash
+      run: |
+        set +e
+        injectguard scan "${{ inputs.path }}" \
+          --format sarif \
+          --output "${{ inputs.sarif-file }}" \
+          --fail-on "${{ inputs.fail-on }}"
+        echo "rc=$?" >> "$GITHUB_OUTPUT"
+        echo "sarif-file=${{ inputs.sarif-file }}" >> "$GITHUB_OUTPUT"
+
+    - name: Upload SARIF to GitHub code scanning
+      if: ${{ inputs.upload-sarif == 'true' && always() }}
+      uses: github/codeql-action/upload-sarif@v3
+      with:
+        sarif_file: ${{ inputs.sarif-file }}
+        category: injectguard
+
+    - name: Fail if scan reported above threshold
+      if: ${{ steps.scan.outputs.rc != '0' }}
+      shell: bash
+      run: |
+        echo "::error::injectguard found findings at or above '${{ inputs.fail-on }}'."
+        exit 1

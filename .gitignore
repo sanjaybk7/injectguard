@@ -1,0 +1,26 @@
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.env
+.coverage
+.coverage.*
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+node_modules/
+*.vsix
+out/
+.vscode-test/
+.DS_Store
+
+# Editor / agent local state — user-specific, not project files
+.claude/
+.idea/
+.vscode/

@@ -1,0 +1,160 @@
+# injectguard tool taxonomy.
+#
+# Each entry maps a tool-name pattern to a classification. Patterns are matched
+# case-insensitively against:
+#   - the tool function's name (e.g., `read_email`)
+#   - the @tool(name=...) override if present
+#   - the tool function's docstring (substring match)
+#
+# Privilege scale:
+#   0 = no real-world impact (search, lookup, compute)
+#   1 = read of own state (own files, own emails) — leak risk only
+#   2 = write/state-changing on own systems (send email, edit file, post message)
+#   3 = high-impact / hard to reverse (transfer money, delete, send to external party,
+#       execute shell, modify production)
+#
+# Reversibility: false means the action cannot be undone by simply running another tool.
+
+sources:
+  - pattern: read_email
+    privilege: 1
+    trust_of_output: untrusted
+    rationale: "Email body is attacker-controllable text."
+  - pattern: get_email
+    privilege: 1
+    trust_of_output: untrusted
+  - pattern: fetch_email
+    privilege: 1
+    trust_of_output: untrusted
+  - pattern: search_web
+    privilege: 0
+    trust_of_output: untrusted
+    rationale: "Web search results contain attacker-influenced content (SEO, prompt injection in HTML)."
+  - pattern: web_search
+    privilege: 0
+    trust_of_output: untrusted
+  - pattern: browse
+    privilege: 0
+    trust_of_output: untrusted
+  - pattern: fetch_url
+    privilege: 0
+    trust_of_output: untrusted
+  - pattern: read_url
+    privilege: 0
+    trust_of_output: untrusted
+  - pattern: scrape
+    privilege: 0
+    trust_of_output: untrusted
+  - pattern: read_pdf
+    privilege: 1
+    trust_of_output: untrusted
+    rationale: "PDFs can embed adversarial text invisible to the user."
+  - pattern: read_document
+    privilege: 1
+    trust_of_output: untrusted
+  - pattern: read_file
+    privilege: 1
+    trust_of_output: mixed
+    rationale: "Files may be user-supplied or contain pasted external content."
+  - pattern: load_file
+    privilege: 1
+    trust_of_output: mixed
+  - pattern: get_ticket
+    privilege: 1
+    trust_of_output: untrusted
+    rationale: "Support tickets contain user-submitted text."
+  - pattern: get_issue
+    privilege: 1
+    trust_of_output: untrusted
+  - pattern: read_slack
+    privilege: 1
+    trust_of_output: untrusted
+  - pattern: read_message
+    privilege: 1
+    trust_of_output: untrusted
+  - pattern: query_database
+    privilege: 1
+    trust_of_output: mixed
+  - pattern: rag_lookup
+    privilege: 0
+    trust_of_output: mixed
+    rationale: "RAG indexes can be poisoned via document ingestion."
+  - pattern: vector_search
+    privilege: 0
+    trust_of_output: mixed
+
+sinks:
+  - pattern: send_email
+    privilege: 2
+    reversible: false
+    rationale: "Email cannot be unsent; can exfiltrate data to external parties."
+  - pattern: send_message
+    privilege: 2
+    reversible: false
+  - pattern: post_message
+    privilege: 2
+    reversible: false
+  - pattern: post_to_slack
+    privilege: 2
+    reversible: false
+  - pattern: send_slack
+    privilege: 2
+    reversible: false
+  - pattern: tweet
+    privilege: 3
+    reversible: false
+  - pattern: post_tweet
+    privilege: 3
+    reversible: false
+  - pattern: transfer_money
+    privilege: 3
+    reversible: false
+  - pattern: make_payment
+    privilege: 3
+    reversible: false
+  - pattern: pay
+    privilege: 3
+    reversible: false
+  - pattern: delete_file
+    privilege: 2
+    reversible: false
+  - pattern: write_file
+    privilege: 2
+    reversible: true
+  - pattern: edit_file
+    privilege: 2
+    reversible: true
+  - pattern: run_shell
+    privilege: 3
+    reversible: false
+  - pattern: execute_command
+    privilege: 3
+    reversible: false
+  - pattern: shell
+    privilege: 3
+    reversible: false
+  - pattern: deploy
+    privilege: 3
+    reversible: false
+  - pattern: create_pr
+    privilege: 2
+    reversible: true
+  - pattern: merge_pr
+    privilege: 3
+    reversible: false
+  - pattern: http_post
+    privilege: 2
+    reversible: false
+    rationale: "Outbound POST can exfiltrate data."
+  - pattern: http_request
+    privilege: 2
+    reversible: false
+  - pattern: webhook
+    privilege: 2
+    reversible: false
+
+both:
+  - pattern: query_user_db
+    privilege: 2
+    trust_of_output: mixed
+    reversible: true
