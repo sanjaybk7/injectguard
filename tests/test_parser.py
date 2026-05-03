@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from injectguard.ir import ToolClassification, TrustLevel
-from injectguard.parsers import LangGraphParser
+from agentguard.ir import ToolClassification, TrustLevel
+from agentguard.parsers import LangGraphParser
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

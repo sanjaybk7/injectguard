@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from injectguard.engine import Scanner
-from injectguard.ir import Severity, ToolClassification, TrustLevel
-from injectguard.parsers import OpenAIAgentsParser
+from agentguard.engine import Scanner
+from agentguard.ir import Severity, ToolClassification, TrustLevel
+from agentguard.parsers import OpenAIAgentsParser
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

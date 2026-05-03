@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from injectguard.engine import Scanner
+from agentguard.engine import Scanner
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

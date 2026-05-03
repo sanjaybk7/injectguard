@@ -17,8 +17,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import ClassVar
 
-from injectguard.ir import Finding, Severity, Tool, TrustLevel
-from injectguard.rules.base import Rule, RuleContext
+from agentguard.ir import Finding, Severity, Tool, TrustLevel
+from agentguard.rules.base import Rule, RuleContext
 
 
 class ConfusedDeputyRule(Rule):

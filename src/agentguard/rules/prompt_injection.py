@@ -15,8 +15,8 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import ClassVar
 
-from injectguard.ir import Finding, Severity
-from injectguard.rules.base import Rule, RuleContext
+from agentguard.ir import Finding, Severity
+from agentguard.rules.base import Rule, RuleContext
 
 _USER_CONTROLLED_HINTS = {
     "request",

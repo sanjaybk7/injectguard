@@ -34,7 +34,7 @@ jobs:
         run: mypy
 
       - name: Test (pytest)
-        run: pytest --cov=injectguard --cov-report=term-missing
+        run: pytest --cov=agentguard --cov-report=term-missing
 
   self-scan:
     runs-on: ubuntu-latest
@@ -48,7 +48,7 @@ jobs:
       - name: Scan our own fixtures (must find issues)
         run: |
           set +e
-          injectguard scan tests/fixtures/vulnerable --include-tests --format json -o findings.json
+          agentguard scan tests/fixtures/vulnerable --include-tests --format json -o findings.json
           rc=$?
           set -e
           # We expect a non-zero exit because the vulnerable fixtures should fire IG001/IG002.

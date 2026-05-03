@@ -16,13 +16,13 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from injectguard.ir import (
+from agentguard.ir import (
     Agent,
     SourceLocation,
     Tool,
     ToolClassification,
 )
-from injectguard.parsers.base import (
+from agentguard.parsers.base import (
     FrameworkParser,
     ModuleContext,
     call_base_name,
@@ -65,7 +65,7 @@ class LangGraphParser(FrameworkParser):
 
 class _Visitor(ast.NodeVisitor):
     def __init__(self, path: Path, taxonomy: object, module_ctx: ModuleContext) -> None:
-        from injectguard.taxonomy import Taxonomy
+        from agentguard.taxonomy import Taxonomy
 
         assert isinstance(taxonomy, Taxonomy)
         self.path = path

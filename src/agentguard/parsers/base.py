@@ -7,8 +7,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from injectguard.ir import Agent, Tool
-from injectguard.taxonomy import Taxonomy
+from agentguard.ir import Agent, Tool
+from agentguard.taxonomy import Taxonomy
 
 # Functions exported by agent SDKs that wrap a prompt without introducing taint.
 # Example: openai-agents-python's `prompt_with_handoff_instructions(prompt)` —

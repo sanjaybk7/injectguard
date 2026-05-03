@@ -1,4 +1,4 @@
-"""injectguard command-line interface."""
+"""agentguard command-line interface."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from injectguard import __version__
-from injectguard.engine import Scanner
-from injectguard.output import format_json, format_pretty, format_sarif
+from agentguard import __version__
+from agentguard.engine import Scanner
+from agentguard.output import format_json, format_pretty, format_sarif
 
 app = typer.Typer(
-    name="injectguard",
+    name="agentguard",
     help="Static analyzer for prompt-injection and confused-deputy risks in LLM agent code.",
     no_args_is_help=True,
     add_completion=False,
@@ -75,13 +75,13 @@ def scan(
 
 @app.command()
 def version() -> None:
-    """Print the installed injectguard version."""
-    typer.echo(f"injectguard {__version__}")
+    """Print the installed agentguard version."""
+    typer.echo(f"agentguard {__version__}")
 
 
 def _exit_code(result: object, fail_on: str) -> int:
-    from injectguard.engine import ScanResult
-    from injectguard.ir import Severity
+    from agentguard.engine import ScanResult
+    from agentguard.ir import Severity
 
     if not isinstance(result, ScanResult):
         return 0

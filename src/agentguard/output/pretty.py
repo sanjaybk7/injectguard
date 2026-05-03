@@ -6,8 +6,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from injectguard.engine import ScanResult
-from injectguard.ir import Severity, SourceLocation
+from agentguard.engine import ScanResult
+from agentguard.ir import Severity, SourceLocation
 
 
 def _format_location(loc: SourceLocation) -> str:

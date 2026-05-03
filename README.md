@@ -1,23 +1,23 @@
-# injectguard
+# agentguard
 
 > Static analyzer for prompt-injection and confused-deputy risks in LLM agent code.
 > The missing `bandit`/`semgrep` for AI agents.
 
-[![CI](https://github.com/sanjaybk7/injectguard/actions/workflows/ci.yml/badge.svg)](https://github.com/sanjaybk7/injectguard/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/injectguard.svg)](https://pypi.org/project/injectguard/)
+[![CI](https://github.com/sanjaybk7/agentguard/actions/workflows/ci.yml/badge.svg)](https://github.com/sanjaybk7/agentguard/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/agentguard.svg)](https://pypi.org/project/agentguard/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/pypi/pyversions/injectguard.svg)](https://pypi.org/project/injectguard/)
+[![Python](https://img.shields.io/pypi/pyversions/agentguard.svg)](https://pypi.org/project/agentguard/)
 
 <!-- TODO: replace with real demo GIF before launch -->
 <!-- ![InjectGuard demo](docs/demo.gif) -->
 
-`injectguard` reads your agent code (LangGraph, OpenAI Agents SDK, plus Jupyter notebooks)
+`agentguard` reads your agent code (LangGraph, OpenAI Agents SDK, plus Jupyter notebooks)
 and flags dangerous architectural patterns **before you ship** — without running the
 agent, without sending data anywhere, without LLM calls.
 
 ```bash
-pip install injectguard
-injectguard scan ./my-agent-project
+pip install agentguard
+agentguard scan ./my-agent-project
 ```
 
 ---
@@ -36,7 +36,7 @@ Existing AI-security tools work at *runtime* — they inspect prompts as they ha
 and try to block injection attempts. They can't tell you whether your agent's
 **architecture** is unsafe.
 
-`injectguard` catches the architectural mistakes at build time, when they're cheap
+`agentguard` catches the architectural mistakes at build time, when they're cheap
 to fix.
 
 ---
@@ -50,27 +50,27 @@ to fix.
 
 Severity is scored on the sink's privilege × reversibility × source trust. The
 classification of which tools are sources vs sinks lives in
-[`src/injectguard/taxonomy.yaml`](src/injectguard/taxonomy.yaml) and is community-extensible.
+[`src/agentguard/taxonomy.yaml`](src/agentguard/taxonomy.yaml) and is community-extensible.
 
 ---
 
 ## Quick start
 
 ```bash
-pip install injectguard
+pip install agentguard
 
 # Scan a directory or a single file
-injectguard scan ./my-agent-project
+agentguard scan ./my-agent-project
 
 # Different output formats
-injectguard scan ./agent --format pretty    # default — human-readable terminal output
-injectguard scan ./agent --format sarif     # GitHub code scanning / IDE integration
-injectguard scan ./agent --format json      # machine-readable
+agentguard scan ./agent --format pretty    # default — human-readable terminal output
+agentguard scan ./agent --format sarif     # GitHub code scanning / IDE integration
+agentguard scan ./agent --format json      # machine-readable
 
 # Useful flags
-injectguard scan ./agent --fail-on high     # exit non-zero on HIGH+ findings (CI gate)
-injectguard scan ./agent --include-tests    # also scan test files (skipped by default)
-injectguard scan ./agent --output report.sarif
+agentguard scan ./agent --fail-on high     # exit non-zero on HIGH+ findings (CI gate)
+agentguard scan ./agent --include-tests    # also scan test files (skipped by default)
+agentguard scan ./agent --output report.sarif
 ```
 
 ### GitHub Action
@@ -78,7 +78,7 @@ injectguard scan ./agent --output report.sarif
 Add to `.github/workflows/ci.yml`:
 
 ```yaml
-- uses: sanjaybk7/injectguard@v0.1.0
+- uses: sanjaybk7/agentguard@v0.1.0
   with:
     path: .
     fail-on: high
@@ -171,7 +171,7 @@ Driven by community feedback after v0 launch.
 - **Cross-module import resolution** for constants used as prompts.
 - **Microsoft Agent Framework** parser (Python).
 - **MCP server** parser.
-- **`injectguard init`** — interactive command to add project-local taxonomy entries
+- **`agentguard init`** — interactive command to add project-local taxonomy entries
   for unfamiliar tool names.
 
 ---
@@ -180,9 +180,9 @@ Driven by community feedback after v0 launch.
 
 Contributions very welcome — especially:
 
-- **New taxonomy entries.** Edit `src/injectguard/taxonomy.yaml` to add tool-name
+- **New taxonomy entries.** Edit `src/agentguard/taxonomy.yaml` to add tool-name
   patterns we don't recognize yet.
-- **New rules.** Subclass `Rule` in `src/injectguard/rules/`.
+- **New rules.** Subclass `Rule` in `src/agentguard/rules/`.
 - **New parsers.** Add a `FrameworkParser` for a framework we don't support.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -191,11 +191,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Security disclosure
 
-If you find a vulnerability in `injectguard` itself (rather than using
-`injectguard` to find vulnerabilities), please email the maintainer rather than
+If you find a vulnerability in `agentguard` itself (rather than using
+`agentguard` to find vulnerabilities), please email the maintainer rather than
 opening a public issue.
 
-If you find a vulnerability in a third-party project using `injectguard`, please
+If you find a vulnerability in a third-party project using `agentguard`, please
 disclose it responsibly to that project's maintainers — give them at least 30
 days to fix before public discussion.
 

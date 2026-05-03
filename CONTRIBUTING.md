@@ -1,4 +1,4 @@
-# Contributing to injectguard
+# Contributing to agentguard
 
 Thanks for your interest. This project is alpha — feedback, bug reports, taxonomy
 additions, and rule contributions are all welcome.
@@ -11,8 +11,8 @@ It explains the architecture and where each kind of contribution fits.
 ## Development setup
 
 ```bash
-git clone https://github.com/sanjaybk7/injectguard.git
-cd injectguard
+git clone https://github.com/sanjaybk7/agentguard.git
+cd agentguard
 python -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 ```
@@ -36,7 +36,7 @@ All three must pass before opening a PR. The CI workflow runs them on Python
 
 ### 1. Add taxonomy entries (no Python required)
 
-The taxonomy in `src/injectguard/taxonomy.yaml` is the brain of the tool — it
+The taxonomy in `src/agentguard/taxonomy.yaml` is the brain of the tool — it
 maps tool-name patterns (matched against function name + docstring) to a
 classification (`source` / `sink` / `both`), a privilege level (0–3), and a
 reversibility flag.
@@ -60,15 +60,15 @@ is a great first contribution.
 
 ### 2. Write a new detection rule
 
-A rule lives in `src/injectguard/rules/`. The minimal template:
+A rule lives in `src/agentguard/rules/`. The minimal template:
 
 ```python
-# src/injectguard/rules/my_rule.py
+# src/agentguard/rules/my_rule.py
 from collections.abc import Iterable
 from typing import ClassVar
 
-from injectguard.ir import Finding, Severity
-from injectguard.rules.base import Rule, RuleContext
+from agentguard.ir import Finding, Severity
+from agentguard.rules.base import Rule, RuleContext
 
 
 class MyRule(Rule):
@@ -92,7 +92,7 @@ class MyRule(Rule):
 
 Steps:
 1. Add the rule class.
-2. Register it in `src/injectguard/rules/__init__.py` by yielding from
+2. Register it in `src/agentguard/rules/__init__.py` by yielding from
    `all_rules()`.
 3. Add a vulnerable fixture in `tests/fixtures/vulnerable/` and a safe
    counterpart in `tests/fixtures/safe/`.
@@ -102,7 +102,7 @@ Steps:
 
 ### 3. Add a new framework parser
 
-A parser lives in `src/injectguard/parsers/` and subclasses `FrameworkParser`.
+A parser lives in `src/agentguard/parsers/` and subclasses `FrameworkParser`.
 Implement two methods:
 
 - `matches_file(source, tree) -> bool` — return True only if the file imports
@@ -144,11 +144,11 @@ existing notebook fixtures and `tests/test_notebook.py` for examples.
 
 ## Reporting a security issue
 
-If you find a vulnerability in `injectguard` itself (rather than using it to
+If you find a vulnerability in `agentguard` itself (rather than using it to
 find vulnerabilities elsewhere), please email the maintainer rather than
 opening a public issue.
 
-If you find a vulnerability in a third-party project using `injectguard`,
+If you find a vulnerability in a third-party project using `agentguard`,
 please disclose it responsibly to that project's maintainers — give them at
 least 30 days to fix before public discussion. Do not file findings against
 specific repos in this project's issue tracker.

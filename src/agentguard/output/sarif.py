@@ -2,7 +2,7 @@
 
 SARIF is the static-analysis interchange format consumed by GitHub code
 scanning, VS Code, JetBrains, Sonar, and most other modern code-review
-surfaces. Producing valid SARIF is what gets injectguard "for free" into
+surfaces. Producing valid SARIF is what gets agentguard "for free" into
 the GitHub Security tab once the action runs.
 """
 
@@ -11,10 +11,10 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from injectguard import __version__
-from injectguard.engine import ScanResult
-from injectguard.ir import Severity
-from injectguard.rules import all_rules
+from agentguard import __version__
+from agentguard.engine import ScanResult
+from agentguard.ir import Severity
+from agentguard.rules import all_rules
 
 # SARIF only has three levels — map our 5-band severity into them.
 _LEVEL = {
@@ -47,7 +47,7 @@ def format_sarif(result: ScanResult) -> str:
                 "name": _camel(rule.name),
                 "shortDescription": {"text": rule.name},
                 "fullDescription": {"text": rule.name},
-                "helpUri": f"https://github.com/sanjaybk7/injectguard/blob/main/docs/rules/{rule.id}.md",
+                "helpUri": f"https://github.com/sanjaybk7/agentguard/blob/main/docs/rules/{rule.id}.md",
                 "properties": {
                     "tags": ["security", "ai", "agents"] + [f"owasp-{i.lower()}" for i in rule.owasp_llm_ids],
                 },
@@ -80,9 +80,9 @@ def format_sarif(result: ScanResult) -> str:
             {
                 "tool": {
                     "driver": {
-                        "name": "injectguard",
+                        "name": "agentguard",
                         "version": __version__,
-                        "informationUri": "https://github.com/sanjaybk7/injectguard",
+                        "informationUri": "https://github.com/sanjaybk7/agentguard",
                         "rules": rules_block,
                     }
                 },

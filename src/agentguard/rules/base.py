@@ -7,8 +7,8 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from typing import ClassVar
 
-from injectguard.ir import Agent, Finding, Tool
-from injectguard.taxonomy import Taxonomy
+from agentguard.ir import Agent, Finding, Tool
+from agentguard.taxonomy import Taxonomy
 
 
 @dataclass

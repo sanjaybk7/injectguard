@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from typing import Any
 
-from injectguard.engine import ScanResult
+from agentguard.engine import ScanResult
 
 
 def format_json(result: ScanResult) -> str:

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 
-from injectguard.rules.base import Rule
-from injectguard.rules.confused_deputy import ConfusedDeputyRule
-from injectguard.rules.prompt_injection import SystemPromptInjectionRule
+from agentguard.rules.base import Rule
+from agentguard.rules.confused_deputy import ConfusedDeputyRule
+from agentguard.rules.prompt_injection import SystemPromptInjectionRule
 
 
 def all_rules() -> Iterable[Rule]:

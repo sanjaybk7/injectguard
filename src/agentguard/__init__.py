@@ -1,6 +1,6 @@
-"""injectguard: static analyzer for prompt-injection and confused-deputy risks in LLM agent code."""
+"""agentguard: static analyzer for prompt-injection and confused-deputy risks in LLM agent code."""
 
-from injectguard.ir import (
+from agentguard.ir import (
     Agent,
     Finding,
     Severity,
