@@ -8,8 +8,7 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 [![Python](https://img.shields.io/pypi/pyversions/agentic-guard.svg)](https://pypi.org/project/agentic-guard/)
 
-<!-- TODO: replace with real demo GIF before launch -->
-<!-- ![InjectGuard demo](docs/demo.gif) -->
+![agentic-guard demo](docs/demo.gif)
 
 `agentic-guard` reads your agent code (LangGraph, OpenAI Agents SDK, plus Jupyter notebooks)
 and flags dangerous architectural patterns **before you ship** — without running the
