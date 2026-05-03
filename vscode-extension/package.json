@@ -1,6 +1,6 @@
 {
-  "name": "agentguard",
-  "displayName": "agentguard",
+  "name": "agentic-guard",
+  "displayName": "agentic-guard",
   "description": "Static analyzer for prompt-injection and confused-deputy risks in LLM agent code.",
   "version": "0.1.0",
   "publisher": "sanjaybk7",
@@ -14,14 +14,14 @@
   "main": "./out/extension.js",
   "contributes": {
     "configuration": {
-      "title": "agentguard",
+      "title": "agentic-guard",
       "properties": {
-        "agentguard.cliPath": {
+        "agentic-guard.cliPath": {
           "type": "string",
-          "default": "agentguard",
-          "description": "Path to the agentguard CLI executable. Defaults to looking it up on PATH."
+          "default": "agentic-guard",
+          "description": "Path to the agentic-guard CLI executable. Defaults to looking it up on PATH."
         },
-        "agentguard.runOn": {
+        "agentic-guard.runOn": {
           "type": "string",
           "enum": ["save", "manual"],
           "default": "save",
@@ -31,12 +31,12 @@
     },
     "commands": [
       {
-        "command": "agentguard.scanWorkspace",
-        "title": "agentguard: Scan workspace"
+        "command": "agentic-guard.scanWorkspace",
+        "title": "agentic-guard: Scan workspace"
       },
       {
-        "command": "agentguard.scanFile",
-        "title": "agentguard: Scan current file"
+        "command": "agentic-guard.scanFile",
+        "title": "agentic-guard: Scan current file"
       }
     ]
   },
@@ -53,6 +53,6 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/sanjaybk7/agentguard.git"
+    "url": "https://github.com/sanjaybk7/agentic-guard.git"
   }
 }

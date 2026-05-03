@@ -1,4 +1,4 @@
-# agentguard tool taxonomy.
+# agentic_guard tool taxonomy.
 #
 # Each entry maps a tool-name pattern to a classification. Patterns are matched
 # case-insensitively against:

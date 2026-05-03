@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from agentguard.engine import Scanner
-from agentguard.output import format_json, format_sarif
+from agentic_guard.engine import Scanner
+from agentic_guard.output import format_json, format_sarif
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -17,7 +17,7 @@ def test_sarif_is_valid_json_and_has_results() -> None:
     doc = json.loads(text)
 
     assert doc["version"] == "2.1.0"
-    assert doc["runs"][0]["tool"]["driver"]["name"] == "agentguard"
+    assert doc["runs"][0]["tool"]["driver"]["name"] == "agentic_guard"
     rule_ids = {r["id"] for r in doc["runs"][0]["tool"]["driver"]["rules"]}
     assert {"IG001", "IG002"}.issubset(rule_ids)
 

@@ -8,7 +8,7 @@ from typing import Any
 
 import yaml
 
-from agentguard.ir import ToolClassification, TrustLevel
+from agentic_guard.ir import ToolClassification, TrustLevel
 
 _DEFAULT_TAXONOMY_PATH = Path(__file__).parent / "taxonomy.yaml"
 

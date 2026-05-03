@@ -18,8 +18,8 @@ from __future__ import annotations
 import ast
 from pathlib import Path
 
-from agentguard.ir import Agent, SourceLocation, Tool, ToolClassification
-from agentguard.parsers.base import (
+from agentic_guard.ir import Agent, SourceLocation, Tool, ToolClassification
+from agentic_guard.parsers.base import (
     FrameworkParser,
     ModuleContext,
     call_base_name,
@@ -58,7 +58,7 @@ class OpenAIAgentsParser(FrameworkParser):
 
 class _Visitor(ast.NodeVisitor):
     def __init__(self, path: Path, taxonomy: object, module_ctx: ModuleContext) -> None:
-        from agentguard.taxonomy import Taxonomy
+        from agentic_guard.taxonomy import Taxonomy
 
         assert isinstance(taxonomy, Taxonomy)
         self.path = path

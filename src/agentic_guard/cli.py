@@ -1,4 +1,4 @@
-"""agentguard command-line interface."""
+"""agentic_guard command-line interface."""
 
 from __future__ import annotations
 
@@ -9,12 +9,12 @@ from typing import Annotated
 import typer
 from rich.console import Console
 
-from agentguard import __version__
-from agentguard.engine import Scanner
-from agentguard.output import format_json, format_pretty, format_sarif
+from agentic_guard import __version__
+from agentic_guard.engine import Scanner
+from agentic_guard.output import format_json, format_pretty, format_sarif
 
 app = typer.Typer(
-    name="agentguard",
+    name="agentic_guard",
     help="Static analyzer for prompt-injection and confused-deputy risks in LLM agent code.",
     no_args_is_help=True,
     add_completion=False,
@@ -75,13 +75,13 @@ def scan(
 
 @app.command()
 def version() -> None:
-    """Print the installed agentguard version."""
-    typer.echo(f"agentguard {__version__}")
+    """Print the installed agentic_guard version."""
+    typer.echo(f"agentic_guard {__version__}")
 
 
 def _exit_code(result: object, fail_on: str) -> int:
-    from agentguard.engine import ScanResult
-    from agentguard.ir import Severity
+    from agentic_guard.engine import ScanResult
+    from agentic_guard.ir import Severity
 
     if not isinstance(result, ScanResult):
         return 0

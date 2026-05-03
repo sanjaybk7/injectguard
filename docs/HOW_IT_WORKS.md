@@ -1,7 +1,7 @@
 # How InjectGuard works
 
 A technical deep-dive into the architecture, design choices, and limitations
-of `agentguard`. Written for engineers and security researchers who want to
+of `agentic-guard`. Written for engineers and security researchers who want to
 understand what the tool does, why, and where its sharp edges are.
 
 ---
@@ -51,12 +51,12 @@ No code is executed. No data leaves the user's machine. No LLM calls are made.
 ```
 
 Each box maps to a real module:
-- Per-framework parsers: `src/agentguard/parsers/`
-- IR types: `src/agentguard/ir.py`
-- Taxonomy: `src/agentguard/taxonomy.py` + `taxonomy.yaml`
-- Rules: `src/agentguard/rules/`
-- Engine that wires it all together: `src/agentguard/engine.py`
-- Output formatters: `src/agentguard/output/`
+- Per-framework parsers: `src/agentic-guard/parsers/`
+- IR types: `src/agentic-guard/ir.py`
+- Taxonomy: `src/agentic-guard/taxonomy.py` + `taxonomy.yaml`
+- Rules: `src/agentic-guard/rules/`
+- Engine that wires it all together: `src/agentic-guard/engine.py`
+- Output formatters: `src/agentic-guard/output/`
 
 ---
 
@@ -111,7 +111,7 @@ SDK). For each, we capture the function name, an optional name override from
 the decorator (`@function_tool(name_override="foo")`), and the docstring.
 
 We then ask the **taxonomy** to classify the tool. The taxonomy is a YAML file
-(`src/agentguard/taxonomy.yaml`) with three sections — `sources`, `sinks`, and
+(`src/agentic-guard/taxonomy.yaml`) with three sections — `sources`, `sinks`, and
 `both` — where each entry is a name-pattern + privilege level + reversibility +
 `trust_of_output`. Matching is case-insensitive substring against the tool name
 *and* the docstring; longest-match wins, so `send_email` beats `send`.
@@ -391,15 +391,15 @@ mattered.
 
 The most impactful contributions, in order:
 
-1. **Add taxonomy entries** in `src/agentguard/taxonomy.yaml`. Each entry is
+1. **Add taxonomy entries** in `src/agentic-guard/taxonomy.yaml`. Each entry is
    one YAML block; no Python required. If you've seen a sink-y tool name
    in the wild that we don't recognize, add it.
 
-2. **Write a new rule** by subclassing `Rule` in `src/agentguard/rules/`.
+2. **Write a new rule** by subclassing `Rule` in `src/agentic-guard/rules/`.
    See `rules/confused_deputy.py` for the template.
 
 3. **Add a new framework parser** by subclassing `FrameworkParser` in
-   `src/agentguard/parsers/`. See `parsers/openai_agents.py` for a complete
+   `src/agentic-guard/parsers/`. See `parsers/openai_agents.py` for a complete
    example. The pattern: implement `matches_file()` (import gate) and
    `extract()` (produce IR Tools and Agents).
 

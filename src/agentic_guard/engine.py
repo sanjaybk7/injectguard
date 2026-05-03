@@ -6,13 +6,13 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from agentguard.ir import Agent, Finding, SourceLocation, Tool
-from agentguard.notebook import load_notebook
-from agentguard.parsers import LangGraphParser, OpenAIAgentsParser
-from agentguard.parsers.base import FrameworkParser
-from agentguard.rules import all_rules
-from agentguard.rules.base import Rule, RuleContext
-from agentguard.taxonomy import Taxonomy
+from agentic_guard.ir import Agent, Finding, SourceLocation, Tool
+from agentic_guard.notebook import load_notebook
+from agentic_guard.parsers import LangGraphParser, OpenAIAgentsParser
+from agentic_guard.parsers.base import FrameworkParser
+from agentic_guard.rules import all_rules
+from agentic_guard.rules.base import Rule, RuleContext
+from agentic_guard.taxonomy import Taxonomy
 
 _PYTHON_EXTENSIONS = {".py"}
 _NOTEBOOK_EXTENSIONS = {".ipynb"}
@@ -66,7 +66,7 @@ class ScanResult:
 
     @property
     def has_blocking(self) -> bool:
-        from agentguard.ir import Severity
+        from agentic_guard.ir import Severity
 
         blocking = {Severity.HIGH, Severity.CRITICAL}
         return any(f.severity in blocking for f in self.findings)

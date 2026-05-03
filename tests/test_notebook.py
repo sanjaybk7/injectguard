@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from agentguard.engine import Scanner
-from agentguard.notebook import load_notebook
-from agentguard.output import format_json, format_pretty
+from agentic_guard.engine import Scanner
+from agentic_guard.notebook import load_notebook
+from agentic_guard.output import format_json, format_pretty
 
 FIXTURES = Path(__file__).parent / "fixtures"
 

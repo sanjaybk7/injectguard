@@ -3,7 +3,7 @@ requires = ["hatchling>=1.18"]
 build-backend = "hatchling.build"
 
 [project]
-name = "agentguard"
+name = "agentic-guard"
 version = "0.1.0"
 description = "Static analyzer for prompt injection and confused-deputy risks in LLM agent code."
 readme = "README.md"
@@ -41,12 +41,12 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/sanjaybk7/agentguard"
-Repository = "https://github.com/sanjaybk7/agentguard"
-Issues = "https://github.com/sanjaybk7/agentguard/issues"
+Homepage = "https://github.com/sanjaybk7/injectguard"
+Repository = "https://github.com/sanjaybk7/injectguard"
+Issues = "https://github.com/sanjaybk7/injectguard/issues"
 
 [project.scripts]
-agentguard = "agentguard.cli:app"
+agentic-guard = "agentic_guard.cli:app"
 
 [project.optional-dependencies]
 dev = [
@@ -58,10 +58,10 @@ dev = [
 ]
 
 [tool.hatch.build.targets.wheel]
-packages = ["src/agentguard"]
+packages = ["src/agentic_guard"]
 
 [tool.hatch.build.targets.wheel.force-include]
-"src/agentguard/taxonomy.yaml" = "agentguard/taxonomy.yaml"
+"src/agentic_guard/taxonomy.yaml" = "agentic_guard/taxonomy.yaml"
 
 [tool.ruff]
 line-length = 100
@@ -74,7 +74,7 @@ ignore = ["E501"]
 [tool.mypy]
 python_version = "3.11"
 strict = true
-files = ["src/agentguard"]
+files = ["src/agentic_guard"]
 warn_unused_ignores = true
 disallow_untyped_defs = true
 

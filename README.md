@@ -1,23 +1,23 @@
-# agentguard
+# agentic-guard
 
 > Static analyzer for prompt-injection and confused-deputy risks in LLM agent code.
 > The missing `bandit`/`semgrep` for AI agents.
 
-[![CI](https://github.com/sanjaybk7/agentguard/actions/workflows/ci.yml/badge.svg)](https://github.com/sanjaybk7/agentguard/actions/workflows/ci.yml)
-[![PyPI](https://img.shields.io/pypi/v/agentguard.svg)](https://pypi.org/project/agentguard/)
+[![CI](https://github.com/sanjaybk7/agentic-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/sanjaybk7/agentic-guard/actions/workflows/ci.yml)
+[![PyPI](https://img.shields.io/pypi/v/agentic-guard.svg)](https://pypi.org/project/agentic-guard/)
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
-[![Python](https://img.shields.io/pypi/pyversions/agentguard.svg)](https://pypi.org/project/agentguard/)
+[![Python](https://img.shields.io/pypi/pyversions/agentic-guard.svg)](https://pypi.org/project/agentic-guard/)
 
 <!-- TODO: replace with real demo GIF before launch -->
 <!-- ![InjectGuard demo](docs/demo.gif) -->
 
-`agentguard` reads your agent code (LangGraph, OpenAI Agents SDK, plus Jupyter notebooks)
+`agentic-guard` reads your agent code (LangGraph, OpenAI Agents SDK, plus Jupyter notebooks)
 and flags dangerous architectural patterns **before you ship** — without running the
 agent, without sending data anywhere, without LLM calls.
 
 ```bash
-pip install agentguard
-agentguard scan ./my-agent-project
+pip install agentic-guard
+agentic-guard scan ./my-agent-project
 ```
 
 ---
@@ -36,7 +36,7 @@ Existing AI-security tools work at *runtime* — they inspect prompts as they ha
 and try to block injection attempts. They can't tell you whether your agent's
 **architecture** is unsafe.
 
-`agentguard` catches the architectural mistakes at build time, when they're cheap
+`agentic-guard` catches the architectural mistakes at build time, when they're cheap
 to fix.
 
 ---
@@ -50,27 +50,27 @@ to fix.
 
 Severity is scored on the sink's privilege × reversibility × source trust. The
 classification of which tools are sources vs sinks lives in
-[`src/agentguard/taxonomy.yaml`](src/agentguard/taxonomy.yaml) and is community-extensible.
+[`src/agentic-guard/taxonomy.yaml`](src/agentic-guard/taxonomy.yaml) and is community-extensible.
 
 ---
 
 ## Quick start
 
 ```bash
-pip install agentguard
+pip install agentic-guard
 
 # Scan a directory or a single file
-agentguard scan ./my-agent-project
+agentic-guard scan ./my-agent-project
 
 # Different output formats
-agentguard scan ./agent --format pretty    # default — human-readable terminal output
-agentguard scan ./agent --format sarif     # GitHub code scanning / IDE integration
-agentguard scan ./agent --format json      # machine-readable
+agentic-guard scan ./agent --format pretty    # default — human-readable terminal output
+agentic-guard scan ./agent --format sarif     # GitHub code scanning / IDE integration
+agentic-guard scan ./agent --format json      # machine-readable
 
 # Useful flags
-agentguard scan ./agent --fail-on high     # exit non-zero on HIGH+ findings (CI gate)
-agentguard scan ./agent --include-tests    # also scan test files (skipped by default)
-agentguard scan ./agent --output report.sarif
+agentic-guard scan ./agent --fail-on high     # exit non-zero on HIGH+ findings (CI gate)
+agentic-guard scan ./agent --include-tests    # also scan test files (skipped by default)
+agentic-guard scan ./agent --output report.sarif
 ```
 
 ### GitHub Action
@@ -78,7 +78,7 @@ agentguard scan ./agent --output report.sarif
 Add to `.github/workflows/ci.yml`:
 
 ```yaml
-- uses: sanjaybk7/agentguard@v0.1.0
+- uses: sanjaybk7/agentic-guard@v0.1.0
   with:
     path: .
     fail-on: high
@@ -171,7 +171,7 @@ Driven by community feedback after v0 launch.
 - **Cross-module import resolution** for constants used as prompts.
 - **Microsoft Agent Framework** parser (Python).
 - **MCP server** parser.
-- **`agentguard init`** — interactive command to add project-local taxonomy entries
+- **`agentic-guard init`** — interactive command to add project-local taxonomy entries
   for unfamiliar tool names.
 
 ---
@@ -180,9 +180,9 @@ Driven by community feedback after v0 launch.
 
 Contributions very welcome — especially:
 
-- **New taxonomy entries.** Edit `src/agentguard/taxonomy.yaml` to add tool-name
+- **New taxonomy entries.** Edit `src/agentic-guard/taxonomy.yaml` to add tool-name
   patterns we don't recognize yet.
-- **New rules.** Subclass `Rule` in `src/agentguard/rules/`.
+- **New rules.** Subclass `Rule` in `src/agentic-guard/rules/`.
 - **New parsers.** Add a `FrameworkParser` for a framework we don't support.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
@@ -191,11 +191,11 @@ See [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Security disclosure
 
-If you find a vulnerability in `agentguard` itself (rather than using
-`agentguard` to find vulnerabilities), please email the maintainer rather than
+If you find a vulnerability in `agentic-guard` itself (rather than using
+`agentic-guard` to find vulnerabilities), please email the maintainer rather than
 opening a public issue.
 
-If you find a vulnerability in a third-party project using `agentguard`, please
+If you find a vulnerability in a third-party project using `agentic-guard`, please
 disclose it responsibly to that project's maintainers — give them at least 30
 days to fix before public discussion.
 

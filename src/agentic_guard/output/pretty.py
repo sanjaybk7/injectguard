@@ -6,8 +6,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from agentguard.engine import ScanResult
-from agentguard.ir import Severity, SourceLocation
+from agentic_guard.engine import ScanResult
+from agentic_guard.ir import Severity, SourceLocation
 
 
 def _format_location(loc: SourceLocation) -> str:
