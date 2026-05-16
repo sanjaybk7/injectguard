@@ -100,7 +100,15 @@ contains `src/__init__.py`. Two subcases, handled per-rule:
   files): src-layout detection rejects (no qualifying subdir). Falls
   through to flat-layout. `src/__init__.py` is indexed as the package
   literally named `src` — the user got the package they asked for, even
-  though the choice of name will confuse readers. Defined behavior.
+  though the choice of name will confuse readers. **Defined behavior, but
+  emit a one-time warning at `discover_package_roots` time:** *"flat-layout
+  detected with top-level package literally named 'src'; this is unusual
+  and may indicate a project misconfiguration"*. The warning fires once
+  per scan regardless of how many `.py` files live under `src/`, so
+  scanning a 50-file package doesn't produce 50 log lines. This is
+  distinct from the orphan warning in §1.2 (which fires per-file when an
+  orphan `__init__.py` is skipped under src-layout); the two warnings
+  cover non-overlapping cases.
 - **Mixed orphan case** (`src/__init__.py` AND `src/<pkg>/` with `.py`
   files both present): src-layout detection wins. The
   `src/__init__.py` becomes an *orphan* — under src-layout semantics it
