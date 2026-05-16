@@ -61,6 +61,9 @@ PEP 517/518-era packaging (hatchling, poetry, flit, pdm, modern setuptools)
 production-quality modern Python codebase the analyzer encounters is likely
 to use it.
 
+**Merging this PR unblocks PR #5 (`fix-3-function-local-binding`), which
+has been paused pending this work.**
+
 ---
 
 ## 1. Path normalization scheme
@@ -88,6 +91,25 @@ Cases the detection rejects:
 - `src/scripts/build.sh` (no `.py` files) — not a package
 - The scan root *is* `src/<pkg>/` (user already scoped to a package)
 
+#### 1.1.1 Edge case: `src/` is itself a package
+
+Rare but real: a project where `src/` is the actual package name and
+contains `src/__init__.py`. Two subcases, handled per-rule:
+
+- **Pure case** (`src/__init__.py` exists, no subdirectories with `.py`
+  files): src-layout detection rejects (no qualifying subdir). Falls
+  through to flat-layout. `src/__init__.py` is indexed as the package
+  literally named `src` — the user got the package they asked for, even
+  though the choice of name will confuse readers. Defined behavior.
+- **Mixed orphan case** (`src/__init__.py` AND `src/<pkg>/` with `.py`
+  files both present): src-layout detection wins. The
+  `src/__init__.py` becomes an *orphan* — under src-layout semantics it
+  shouldn't be importable as a package at all, because `src/` itself is
+  the package root rather than a containing package. The file is
+  skipped with a warning rather than silently miscategorized as the
+  empty-string module path. See §1.2 for the `file_to_module_path`
+  branch that enforces this.
+
 ### 1.2 Normalization
 
 **Proposal:** introduce the concept of a `package_root` — the directory
@@ -105,16 +127,66 @@ def discover_package_roots(scan_root: Path) -> list[Path]:
 ```
 
 `file_to_module_path` then takes the *package root that contains the file*
-instead of the scan root:
+instead of the scan root, with two new guards (symlink containment + orphan
+`__init__.py` detection):
 
 ```python
 def file_to_module_path(file: Path, package_root: Path) -> str | None:
-    # identical body, just keyed off package_root instead of scan_root
+    # Resolve symlinks; if the resolved file points outside the resolved
+    # package_root (symlink escape), skip — we don't index files that
+    # physically live elsewhere on disk. Silent ValueError would otherwise
+    # propagate from relative_to(); guarding it explicitly is clearer.
+    try:
+        rel = file.resolve().relative_to(package_root.resolve())
+    except ValueError:
+        log.debug("skipping %s: not under package_root %s", file, package_root)
+        return None
+
+    parts = list(rel.with_suffix("").parts)
+
+    # Orphan __init__.py at the package root itself (parts == ["__init__"])
+    # is the src-layout edge case from §1.1.1: src/__init__.py exists
+    # alongside src/<pkg>/ subdirectories. Without this branch the function
+    # would silently return None (empty parts after dropping __init__), which
+    # is correct behavior dressed up as a bug. Log it explicitly.
+    if parts == ["__init__"]:
+        log.warning("orphan __init__.py at package root %s; skipping", file)
+        return None
+
+    if parts and parts[-1] == "__init__":
+        parts.pop()
+    return ".".join(parts) if parts else None
 ```
 
 `PackageSymbolTable.build()` discovers package roots once, then iterates
 files and picks the most-specific package root that contains each file
 (`max(roots, key=lambda r: len(r.parts) if file is_relative_to r else -1)`).
+
+#### 1.2.1 Symlink policy
+
+The `.resolve()` call follows symlinks. A symlink at `src/pkg` pointing
+into `/elsewhere/` will be resolved to its physical location; if that
+location is outside the resolved `package_root`, the `relative_to()`
+guard rejects it and logs at debug level. Rationale: indexing files
+that don't physically live under the scan root makes module-path
+collision and de-duplication semantics ambiguous, and the most common
+real-world reason for an outbound symlink (a vendored package linked
+from elsewhere on disk) is precisely the case where you do *not* want
+the analyzer to also walk that other tree. If the user wants symlinked
+content scanned, they can run the scan against the real location.
+
+#### 1.2.2 Case sensitivity
+
+Module path matching is case-sensitive in both directions: the
+filesystem-derived path and the import-statement string are compared
+verbatim. This mirrors Python's import system, which is case-sensitive
+on every platform regardless of the underlying filesystem (macOS
+HFS+/APFS and Windows NTFS are case-insensitive case-preserving by
+default; Python imports them case-sensitively anyway). A file at
+`src/Agents/__init__.py` is indexed as `Agents`; `from agents import X`
+does not match it. **Do not case-fold either side, even on
+case-insensitive filesystems.** This is a deliberate choice; a future
+"helpful" normalization PR would silently change semantics.
 
 ### 1.3 Worked examples
 
@@ -170,10 +242,27 @@ distributable package.** Document in a comment; surface as a
 
 ### 2.4 PEP 420 namespace packages — no `__init__.py`
 
-**Proposal: support transparently.** Detection rule in §1.1 already
-permits this — we look for `.py` files, not `__init__.py`. The
-indexing logic is unchanged because `file_to_module_path` doesn't read
-`__init__.py` either; it just collapses paths.
+**Proposal: support transparently** at both the top-level (src-layout
+detection) and nested (within-package) levels.
+
+**Top-level:** detection rule in §1.1 looks for `.py` files, not
+`__init__.py`. `src/<pkg>/foo.py` with no `__init__.py` anywhere triggers
+src-layout normally.
+
+**Nested:** a directory at `src/pkg/sub/` containing `.py` files but no
+`__init__.py` resolves as `pkg.sub` — `file_to_module_path` never reads
+`__init__.py`, it just collapses paths. So `from pkg.sub.foo import X`
+resolves whether or not `pkg/sub/__init__.py` exists. This matches
+Python's runtime import system (PEP 420).
+
+Rationale: **we analyze what will import at runtime, not what should be
+importable by convention.** This is a deliberate position. Strict
+static-analysis tools differ here — mypy's default rejects implicit
+namespace packages and requires `--namespace-packages` to opt in;
+pylint/flake8 historically warned against missing `__init__.py`. Our
+choice aligns with the runtime, not with strict-mode conventions,
+because mismatching the runtime would produce false negatives (real
+imports that resolve in production but not in our analyzer).
 
 **Caveat:** in real PEP 420 codebases, you can have the *same* dotted
 module path split across multiple physical directories on `sys.path`.
@@ -202,25 +291,89 @@ package, but the pattern generalizes).
   support these; the analyzer is Python-3-only.
 - **PEP 420 multi-root namespace packages** (§2.4 caveat). Deferred.
 
+### 2.7 `tests/` directories inside packages
+
+The symbol-table pre-pass indexes **every** `.py` file under any package
+root, including files under `tests/`, `test/`, `testing/`, `__tests__/`
+directories. This is deliberate: `tests/foo.py` is a valid Python module
+that could be imported by another module, and if a non-test file does
+`from tests.foo import PROMPT_CONSTANT`, we want that constant to
+resolve.
+
+The Scanner's `_is_test_path` filter (which skips test files from
+vulnerability detection per `_iter_scannable_files`) applies **only** to
+the rule-evaluation phase, not to the symbol-table pre-pass. The two
+concerns are kept separate and the design preserves that distinction:
+
+- **Symbol table (PR #4 + Fix 1):** indexes everything that could be a
+  Python import target. Includes `tests/` content.
+- **Rule evaluation (existing Fix 1 behavior):** ignores fixture files
+  that intentionally encode vulnerable patterns to test the analyzer
+  itself.
+
+A future ergonomic improvement (`--include-tests`) could opt symbol-table
+behavior into matching rule-evaluation behavior, but for v0.2 the
+separation is what we want. **Specifically:** under src-layout, a
+`src/pkg/tests/` directory is *not* promoted to a package root and is
+indexed as `pkg.tests.*` like any normal sub-package. The package-root
+discovery in §1.1 only considers the literal `<scan_root>/src/`; no
+other directory name (`tests`, `vendor`, etc.) is special-cased.
+
+### 2.8 Multi-root scans (future consideration)
+
+`agentic-guard scan repo_a repo_b` is **not supported in v0.2.** The CLI
+(`cli.py:scan`) takes a single `Path` argument; `Scanner.scan(target)`
+builds one `PackageSymbolTable` per call. Two separate `Scanner.scan`
+calls produce two independent tables that do not cross-contaminate.
+
+If multi-target scanning is added in the future, **each scan root MUST
+maintain its own `PackageSymbolTable`.** Merging tables across unrelated
+repos would silently collide on package names — every `agents` package
+in every project would land in the same key, and `from agents.foo import
+X` in repo A could resolve to repo B's `agents.foo.X`. Documenting this
+here so a future implementer doesn't reach for a single shared table as
+an "optimization."
+
 ---
 
 ## 3. Scope discipline
 
-Estimated line counts for the implementation:
+Estimated line counts for the implementation, after the review-feedback
+additions in §1.1.1, §1.2.1, and §1.2.2:
 
 | Component | LOC (est.) |
 |---|---|
 | `discover_package_roots(scan_root)` | ~12 |
-| Modified `file_to_module_path(file, package_root)` | ~3 (rename param + signature) |
+| Modified `file_to_module_path(file, package_root)` with symlink guard + orphan-`__init__.py` check | ~10 |
 | Modified `PackageSymbolTable.build()` to iterate roots + pick most-specific | ~10 |
 | Conflict-resolution comment (src-layout wins per §2.3) | ~3 |
-| **Subtotal** | **~28** |
+| Module-level `log = logging.getLogger(__name__)` + `import logging` | ~2 |
+| **Subtotal** | **~37** |
 
-This is within the ~30-line budget the review set. If the implementation
-exceeds 35 lines before tests, **I will pause and surface why before
-continuing.** The most likely overrun source is multi-root conflict
-resolution; if that grows, I'll consider dropping it in favor of
-single-root-wins-by-precedence and surface the simplification.
+### 3.1 Budget revision
+
+Original estimate: ~28 LOC against a 30-LOC budget. Items #1
+(symlink containment guard) and #5b (explicit orphan-`__init__.py`
+handling) from the review feedback together added ~8–10 LOC. The
+updated estimate of ~36–38 LOC **crosses the original 30-LOC trigger.**
+
+This is logged here as an explicit budget revision rather than scope
+creep. Both additions guard against silent miscategorization that would
+be hard to debug in the field:
+
+- The symlink guard prevents `relative_to()` from raising a `ValueError`
+  that, under the original implementation, would have been silently
+  caught by an upstream `try` and produced an unindexed file with no
+  log signal.
+- The orphan-`__init__.py` check prevents an empty-parts return value
+  that would be syntactically valid (`return None`) but semantically a
+  bug (the file *should* have been logged as skipped, not silently
+  dropped).
+
+If the implementation as actually written exceeds ~42 LOC, **I will
+pause and surface why before continuing.** The most likely overrun
+source remains multi-root conflict resolution per §2.3; if that grows,
+single-root-wins-by-precedence is the fallback.
 
 **Out-of-scope guard:** this PR does NOT touch
 `CrossModuleResolver` or `build_resolver`. Per-file import resolution is
@@ -330,18 +483,60 @@ covers this** — we look up by exact module path, not by name-anywhere.
 This test confirms that, and prevents future regressions if anyone
 "helpfully" adds a fallback lookup.
 
-### 4.7 Real-world A/B re-scan
+### 4.7 Real-world A/B re-scan — directional prediction only
 
-Re-run the 9-repo corpus from PR #1/PR #2 validation. Expected per-repo
-deltas (PR #2 baseline → PR #4 applied):
+Re-run the 9-repo corpus from PR #1/PR #2 validation. We commit to a
+**directional prediction only**: `openai-agents-python`'s IG002 count
+drops by approximately 6 (from PR #2's baseline of 13) because the typed
+agents in `customer_service/main.py` — surfaced but unresolved by PR #2 —
+now resolve cross-module through the src-layout-aware symbol table. No
+other repo's count should change.
 
-| Repo | PR #2 IG002 | Predicted | Δ |
+| Repo | PR #2 IG002 | Predicted post-PR-#4 | Δ |
 |---|---:|---:|---:|
-| openai-agents-python | 13 | 7 | **−6** |
+| openai-agents-python | 13 | ~7 | **−6 (directional)** |
 | every other repo | unchanged | unchanged | 0 |
 
-If the openai-agents-python delta isn't −6, the implementation has a bug
-and we don't ship.
+**The residual count (~7) is not claimed to be fully true-positive.**
+Per spot-inspection during PR #2's analysis, the residual breaks down
+approximately as:
+
+- **~1 confirmed true positive** — the `{repo}` f-string interpolation in
+  `examples/hosted_mcp/simple.py`, which interpolates a function
+  parameter directly into the system prompt. Real dynamic-prompt risk;
+  IG002 firing here is correct.
+- **Several function-local-literal-binding false positives** that PR #5
+  explicitly targets. The dominant pattern is
+  ```python
+  instructions = (
+      "You assist support agents. ..."
+      "...keep responses under three sentences."
+  )
+  agent = Agent(name="...", instructions=instructions, ...)
+  ```
+  where `instructions` is a function-local variable bound to an
+  implicit-concat string literal. PR #4 has nothing to say about this;
+  PR #5 does.
+- **A small number requiring re-inspection** with the post-PR-#4 numbers
+  in hand to judge whether they're TPs, function-local FPs, or
+  something else (e.g. `prompt_server/main.py:63`'s
+  `instructions=instructions` where `instructions` is set above as a
+  function call result — TP under our current rule, but the function
+  call returns an MCP-server-provided prompt that may or may not be
+  attacker-influenced depending on the MCP server's trust posture).
+
+**Per-finding TP/FP/AMBIGUOUS labels belong to a future precision
+measurement, not to this PR's acceptance.** Full corpus precision will
+be re-measured after PR #5 and reported in the v0.2 release notes, with
+the per-finding breakdown surfaced there.
+
+### 4.8 Acceptance criterion
+
+The openai-agents-python IG002 delta is approximately −6 (±2 to
+accommodate minor measurement variance from re-cloning the corpus on a
+different day). Other repos' IG002 counts must not change. If either
+condition fails, the implementation has a bug and we do not ship — we
+investigate before merging.
 
 ---
 
