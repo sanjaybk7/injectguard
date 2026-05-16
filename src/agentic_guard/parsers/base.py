@@ -7,6 +7,12 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from agentic_guard.analysis.symbol_table import (
+    CrossModuleResolver,
+    PackageSymbolTable,
+    build_resolver,
+    file_to_module_path,
+)
 from agentic_guard.ir import Agent, Tool
 from agentic_guard.taxonomy import Taxonomy
 
@@ -16,6 +22,20 @@ from agentic_guard.taxonomy import Taxonomy
 SAFE_PROMPT_HELPERS: frozenset[str] = frozenset({
     "prompt_with_handoff_instructions",
 })
+
+
+@dataclass
+class ScanContext:
+    """Package-level facts shared across all per-file parses in one scan.
+
+    Carries the global symbol table and the scan root so each file's parser
+    can build a per-file ``CrossModuleResolver`` against a consistent view of
+    the project. Optional everywhere — when ``None``, parsers behave exactly
+    as in v0.1 (module-local resolution only).
+    """
+
+    symbol_table: PackageSymbolTable
+    scan_root: Path
 
 
 class FrameworkParser(ABC):
@@ -39,14 +59,23 @@ class FrameworkParser(ABC):
         """Extract tools and agents from an already-parsed file."""
         raise NotImplementedError
 
-    def parse_file(self, path: Path) -> tuple[list[Tool], list[Agent]]:
+    def parse_file(
+        self,
+        path: Path,
+        scan_context: ScanContext | None = None,
+    ) -> tuple[list[Tool], list[Agent]]:
         try:
             source = path.read_text(encoding="utf-8")
         except (OSError, UnicodeDecodeError):
             return [], []
-        return self.parse_source(path, source)
+        return self.parse_source(path, source, scan_context=scan_context)
 
-    def parse_source(self, path: Path, source: str) -> tuple[list[Tool], list[Agent]]:
+    def parse_source(
+        self,
+        path: Path,
+        source: str,
+        scan_context: ScanContext | None = None,
+    ) -> tuple[list[Tool], list[Agent]]:
         """Parse already-loaded source. Used by notebook flow which extracts source first."""
         try:
             tree = ast.parse(source, filename=str(path))
@@ -54,7 +83,30 @@ class FrameworkParser(ABC):
             return [], []
         if not self.matches_file(source, tree):
             return [], []
-        return self.extract(path, source, tree)
+        self._active_scan_context = scan_context
+        try:
+            return self.extract(path, source, tree)
+        finally:
+            self._active_scan_context = None
+
+    # Internal hook so subclasses can fetch the active ScanContext without
+    # changing the public ``extract`` signature. Subclasses pull this in
+    # their visitor setup; everything else stays as-is.
+    _active_scan_context: ScanContext | None = None
+
+    def build_cross_module(
+        self,
+        path: Path,
+        tree: ast.Module,
+    ) -> CrossModuleResolver | None:
+        """Return a per-file resolver if a ScanContext is active, else ``None``."""
+        ctx = self._active_scan_context
+        if ctx is None:
+            return None
+        mod_path = file_to_module_path(path, ctx.scan_root)
+        if mod_path is None:
+            return None
+        return build_resolver(tree, file_module_path=mod_path, table=ctx.symbol_table)
 
 
 def collect_imports(tree: ast.Module) -> set[str]:
@@ -110,19 +162,35 @@ class ModuleContext:
     Knowing whether a Name resolves to a string constant, a function definition,
     or something unknown is the difference between flagging a real dynamic
     prompt and flagging a perfectly safe `instructions=PROMPT_CONSTANT`.
+
+    ``cross_module`` is set when the engine is scanning a directory and was
+    able to build a global symbol table; it lets Name lookups continue across
+    file boundaries when they fail locally.
     """
 
     string_constants: dict[str, ast.Constant] = field(default_factory=dict)
     function_defs: set[str] = field(default_factory=set)
+    cross_module: CrossModuleResolver | None = None
+
+    def name_resolves_to_static(self, name: str) -> bool:
+        """Local first, then cross-module — matches Python's LEGB-ish shadowing."""
+        if name in self.string_constants or name in self.function_defs:
+            return True
+        if self.cross_module is not None and self.cross_module.resolves_to_static(name):
+            return True
+        return False
 
 
-def collect_module_context(tree: ast.Module) -> ModuleContext:
+def collect_module_context(
+    tree: ast.Module,
+    cross_module: CrossModuleResolver | None = None,
+) -> ModuleContext:
     """Walk top-level statements to record string-constant assignments and function defs.
 
     We only look at module-scope assignments, since constants used as prompts are
     overwhelmingly defined at module scope. Walking deeper introduces noise.
     """
-    ctx = ModuleContext()
+    ctx = ModuleContext(cross_module=cross_module)
     for stmt in tree.body:
         if isinstance(stmt, (ast.FunctionDef, ast.AsyncFunctionDef)):
             ctx.function_defs.add(stmt.name)
@@ -151,6 +219,11 @@ def _joined_str_is_constant(expr: ast.JoinedStr) -> bool:
     return all(isinstance(v, ast.Constant) for v in expr.values)
 
 
+def _resolves_static(module: ModuleContext | None, name: str) -> bool:
+    """Convenience: ``module`` may be ``None`` (parsers used standalone in tests)."""
+    return module is not None and module.name_resolves_to_static(name)
+
+
 def classify_prompt_expr(
     expr: ast.expr,
     module: ModuleContext | None = None,
@@ -158,9 +231,11 @@ def classify_prompt_expr(
     """Return (is_dynamic, list_of_taint_source_names) for a prompt expression.
 
     When `module` is provided, Name nodes that resolve to string constants or
-    function definitions in that module are treated as static. This collapses
-    the most common false-positive class observed in real-world agent code:
-    `instructions=MY_PROMPT` where `MY_PROMPT = "..."` lives at module scope.
+    function definitions — either in this module or via a cross-module
+    resolver — are treated as static. This collapses the dominant false-
+    positive classes: ``instructions=MY_PROMPT`` where ``MY_PROMPT = "..."``
+    lives at module scope, and ``from prompts import SYSTEM_PROMPT`` where
+    the constant lives in a sibling file.
     """
     if isinstance(expr, ast.Constant) and isinstance(expr.value, str):
         return False, []
@@ -172,21 +247,18 @@ def classify_prompt_expr(
         for value in expr.values:
             if isinstance(value, ast.FormattedValue):
                 inner_names = names_in(value.value)
-                # If every interpolated name is a known string constant, treat as static.
-                if module and all(n in module.string_constants for n in inner_names):
+                if all(_resolves_static(module, n) for n in inner_names):
                     continue
-                sources.extend(
-                    n for n in inner_names if not module or n not in module.string_constants
-                )
+                sources.extend(n for n in inner_names if not _resolves_static(module, n))
         if not sources:
             return False, []
         return True, sources
 
     if isinstance(expr, ast.BinOp) and isinstance(expr.op, ast.Add):
         all_names = names_in(expr)
-        if module and all(n in module.string_constants for n in all_names):
+        if all(_resolves_static(module, n) for n in all_names):
             return False, []
-        return True, [n for n in all_names if not module or n not in module.string_constants]
+        return True, [n for n in all_names if not _resolves_static(module, n)]
 
     if isinstance(expr, ast.Call):
         # Safe SDK helpers: trust passes through to the wrapped argument.
@@ -195,27 +267,27 @@ def classify_prompt_expr(
             if expr.args:
                 return classify_prompt_expr(expr.args[0], module)
             return False, []
-        # str.format(...) — if the template is a known string constant
-        # AND every interpolated value is a known constant, it's static.
+        # str.format(...) — if every interpolated name is a known constant,
+        # the result is static.
         if isinstance(expr.func, ast.Attribute) and expr.func.attr == "format":
             arg_names = names_in(expr)
-            if module and all(n in module.string_constants for n in arg_names):
+            if all(_resolves_static(module, n) for n in arg_names):
                 return False, []
-            return True, [
-                n for n in arg_names if not module or n not in module.string_constants
-            ]
+            return True, [n for n in arg_names if not _resolves_static(module, n)]
         all_names = names_in(expr)
-        return True, [
-            n for n in all_names if not module or n not in module.string_constants
-        ]
+        return True, [n for n in all_names if not _resolves_static(module, n)]
 
     if isinstance(expr, ast.Name):
-        if module and expr.id in module.string_constants:
-            return False, []
-        # Function reference (callable-as-instructions) is the canonical SDK
-        # pattern for context-aware prompts in OpenAI Agents SDK; treat as safe.
-        if module and expr.id in module.function_defs:
+        if _resolves_static(module, expr.id):
             return False, []
         return True, [expr.id]
+
+    if isinstance(expr, ast.Attribute):
+        # ``mod.NAME`` — static iff ``mod`` is an imported module reference
+        # and ``NAME`` resolves to a literal/function within that module.
+        if isinstance(expr.value, ast.Name) and module and module.cross_module:
+            if module.cross_module.attribute_resolves_to_static(expr.value.id, expr.attr):
+                return False, []
+        return True, names_in(expr)
 
     return True, names_in(expr)

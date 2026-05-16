@@ -1,4 +1,4 @@
-# How InjectGuard works
+# How agentic-guard works
 
 A technical deep-dive into the architecture, design choices, and limitations
 of `agentic-guard`. Written for engineers and security researchers who want to
@@ -8,7 +8,7 @@ understand what the tool does, why, and where its sharp edges are.
 
 ## TL;DR
 
-InjectGuard reads Python files (and Jupyter notebooks) statically, identifies
+`agentic-guard` reads Python files (and Jupyter notebooks) statically, identifies
 LLM agent definitions and the tools attached to them, classifies each tool as
 a *source* (returns untrusted data) or *sink* (causes side effects) using a
 YAML taxonomy of name patterns, and runs a small set of rules over the
@@ -51,12 +51,13 @@ No code is executed. No data leaves the user's machine. No LLM calls are made.
 ```
 
 Each box maps to a real module:
-- Per-framework parsers: `src/agentic-guard/parsers/`
-- IR types: `src/agentic-guard/ir.py`
-- Taxonomy: `src/agentic-guard/taxonomy.py` + `taxonomy.yaml`
-- Rules: `src/agentic-guard/rules/`
-- Engine that wires it all together: `src/agentic-guard/engine.py`
-- Output formatters: `src/agentic-guard/output/`
+- Per-framework parsers: `src/agentic_guard/parsers/`
+- IR types: `src/agentic_guard/ir.py`
+- Taxonomy: `src/agentic_guard/taxonomy.py` + `taxonomy.yaml`
+- Rules: `src/agentic_guard/rules/`
+- Cross-module symbol resolution: `src/agentic_guard/analysis/symbol_table.py`
+- Engine that wires it all together: `src/agentic_guard/engine.py`
+- Output formatters: `src/agentic_guard/output/`
 
 ---
 
@@ -111,7 +112,7 @@ SDK). For each, we capture the function name, an optional name override from
 the decorator (`@function_tool(name_override="foo")`), and the docstring.
 
 We then ask the **taxonomy** to classify the tool. The taxonomy is a YAML file
-(`src/agentic-guard/taxonomy.yaml`) with three sections — `sources`, `sinks`, and
+(`src/agentic_guard/taxonomy.yaml`) with three sections — `sources`, `sinks`, and
 `both` — where each entry is a name-pattern + privilege level + reversibility +
 `trust_of_output`. Matching is case-insensitive substring against the tool name
 *and* the docstring; longest-match wins, so `send_email` beats `send`.
@@ -158,11 +159,37 @@ Before walking for tools and agents, each parser first runs
 When evaluating whether a system prompt is "dynamic," we use this context. If
 `instructions=MY_PROMPT` and `MY_PROMPT` resolves to a string literal, we treat
 it as static. If it resolves to a function definition (the canonical
-OpenAI SDK pattern for context-aware prompts), we also treat it as safe. This
-single change collapsed ~17% of the false positives we saw in our first
-real-world scan round.
+OpenAI SDK pattern for context-aware prompts), we also treat it as safe.
 
-We *don't* follow imports across modules — that's a documented v0 limitation.
+### Cross-module resolution
+
+`MY_PROMPT` very often lives in a sibling `prompts.py`, not the agent file.
+Before per-file parsing begins, `Scanner._build_scan_context()` walks every
+`.py` file under the scan root and builds a **package-level symbol table**
+(see `analysis/symbol_table.py`). Each module exports the set of names it
+binds at top level to a string literal or function definition; names that are
+assigned more than once at module scope, or whose RHS isn't a static literal,
+are dropped (conservative).
+
+For each file being parsed, a per-file `CrossModuleResolver` is constructed
+from the file's import statements. It handles:
+
+- `from prompts import SYSTEM_PROMPT` → resolves `SYSTEM_PROMPT` to
+  `prompts.SYSTEM_PROMPT`
+- `from prompts import SYSTEM_PROMPT as SP` → resolves `SP`
+- `from .prompts import X` and `from ..common.prompts import X` (relative
+  imports, resolved against the file's own dotted module path)
+- `from prompts import *` → all literals/functions in `prompts` are in scope
+- `import prompts; prompts.SYSTEM_PROMPT` and `import prompts as p;
+  p.SYSTEM_PROMPT` (module-attribute access)
+- `try: from prompts import X; except ImportError: X = "fallback"` (optional
+  dependency pattern; both branches of a top-level `try` are scanned)
+- Last-import-wins when the same name is imported from two modules, matching
+  Python's runtime semantics
+
+The two collapsed false-positive classes — module-local constants (v0.1) and
+cross-module constants (v0.2) — together accounted for most of the IG002
+noise observed in the v0.1 real-world scan corpus.
 
 ---
 
@@ -245,14 +272,14 @@ side effect, with nothing between them. If the LLM ever gets a clever prompt,
 you lose." That's the kind of architectural risk you want to surface at PR
 time, not at incident-response time.
 
-Both approaches have their place. InjectGuard fills the static gap.
+Both approaches have their place. `agentic-guard` fills the static gap.
 
 ---
 
 ## Adapting taint analysis for LLM agents
 
 This is the conceptual move worth understanding deeply, because it's the part
-that makes InjectGuard's approach defensible.
+that makes `agentic-guard`'s approach defensible.
 
 **Classical taint analysis** (used in tools like Pysa, CodeQL, Semgrep) tracks
 data flowing through *variables*. If untrusted data reaches a sink without
@@ -295,8 +322,8 @@ purely a parser-level change — the rules stay the same.
 
 This is the same pattern LLVM uses for compilers (any source language → LLVM
 IR → any target machine). It's why adding a new language to LLVM gets every
-CPU target for free, and it's why adding a framework to InjectGuard gets every
-rule for free.
+CPU target for free, and it's why adding a framework to `agentic-guard`
+gets every rule for free.
 
 ---
 
@@ -350,22 +377,28 @@ will walk inside tool function bodies for known-dangerous library calls
 (`smtplib.send_*`, `subprocess.run`, `requests.post`, `boto3.client('ses')`,
 etc.). Deferred until v0 launch generates real demand signal.
 
-### Cross-module imports are not resolved
+### What cross-module resolution still misses
 
-We resolve `instructions=NAME` where `NAME = "..."` lives in the same module.
-We don't follow imports. So if a project does:
+As of v0.2, cross-module string-constant resolution closes the dominant
+residual false positive from v0.1 (`from prompts import SYSTEM_PROMPT` no
+longer fires IG002 when the imported name is a literal). The remaining gaps
+are deliberate:
 
-```python
-from prompts import SYSTEM_PROMPT
-
-agent = Agent(instructions=SYSTEM_PROMPT, ...)
-```
-
-…we'll currently flag `IG002` because we can't see `SYSTEM_PROMPT`'s
-definition in the imported module. This is the most common residual false
-positive after the v0.1 fixes; it's documented as a v0 limitation. Closing
-it requires whole-package analysis, which is a meaningful jump in
-complexity.
+- **Dynamic construction inside an imported module.** If `prompts.py` builds
+  `SYSTEM_PROMPT` via an f-string, `.format()`, file read, environment
+  variable, or function call, the resolver refuses to mark it static — IG002
+  fires. Following dynamic construction across modules is the kind of work
+  that turns a tractable analyzer into a soundness goose-chase, and it would
+  reintroduce the false-positive class we just paid down.
+- **Runtime-loaded prompts.** Prompts loaded from files
+  (`Path('prompt.txt').read_text()`), databases, configuration servers,
+  feature-flag systems, or constructed inside a class `__init__` are all
+  treated as dynamic. That's correct: the analyzer can't see what these
+  resolve to, and pretending otherwise would mask real injection risk.
+- **Re-export chains beyond one hop.** If `myapp/__init__.py` does
+  `from .prompts import SYSTEM_PROMPT` and then user code does
+  `from myapp import SYSTEM_PROMPT`, we follow it one hop. Deeper chains
+  fall back to the conservative default.
 
 ### LLM-as-instructions callable bodies are not analyzed
 
@@ -391,15 +424,15 @@ mattered.
 
 The most impactful contributions, in order:
 
-1. **Add taxonomy entries** in `src/agentic-guard/taxonomy.yaml`. Each entry is
+1. **Add taxonomy entries** in `src/agentic_guard/taxonomy.yaml`. Each entry is
    one YAML block; no Python required. If you've seen a sink-y tool name
    in the wild that we don't recognize, add it.
 
-2. **Write a new rule** by subclassing `Rule` in `src/agentic-guard/rules/`.
+2. **Write a new rule** by subclassing `Rule` in `src/agentic_guard/rules/`.
    See `rules/confused_deputy.py` for the template.
 
 3. **Add a new framework parser** by subclassing `FrameworkParser` in
-   `src/agentic-guard/parsers/`. See `parsers/openai_agents.py` for a complete
+   `src/agentic_guard/parsers/`. See `parsers/openai_agents.py` for a complete
    example. The pattern: implement `matches_file()` (import gate) and
    `extract()` (produce IR Tools and Agents).
 

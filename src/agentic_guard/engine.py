@@ -6,10 +6,11 @@ from collections.abc import Iterable
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from agentic_guard.analysis.symbol_table import PackageSymbolTable
 from agentic_guard.ir import Agent, Finding, SourceLocation, Tool
 from agentic_guard.notebook import load_notebook
 from agentic_guard.parsers import LangGraphParser, OpenAIAgentsParser
-from agentic_guard.parsers.base import FrameworkParser
+from agentic_guard.parsers.base import FrameworkParser, ScanContext
 from agentic_guard.rules import all_rules
 from agentic_guard.rules.base import Rule, RuleContext
 from agentic_guard.taxonomy import Taxonomy
@@ -101,6 +102,8 @@ class Scanner:
         # Notebook line-remap context, keyed by file path (only .ipynb files appear).
         notebook_line_maps: dict[Path, dict[int, tuple[int, int]]] = {}
 
+        scan_context = self._build_scan_context(target)
+
         for file in self._iter_scannable_files(target):
             result.files_scanned += 1
             if file.suffix in _NOTEBOOK_EXTENSIONS:
@@ -109,12 +112,14 @@ class Scanner:
                     continue
                 notebook_line_maps[file] = notebook.line_to_cell
                 for parser in self.parsers:
-                    tools, agents = parser.parse_source(file, notebook.source)
+                    tools, agents = parser.parse_source(
+                        file, notebook.source, scan_context=scan_context
+                    )
                     all_tools.extend(tools)
                     all_agents.extend(agents)
             else:
                 for parser in self.parsers:
-                    tools, agents = parser.parse_file(file)
+                    tools, agents = parser.parse_file(file, scan_context=scan_context)
                     all_tools.extend(tools)
                     all_agents.extend(agents)
 
@@ -134,6 +139,27 @@ class Scanner:
             )
         )
         return result
+
+    def _build_scan_context(self, target: Path) -> ScanContext | None:
+        """Walk all .py files under the scan root and build a global symbol table.
+
+        Notebooks are excluded from the symbol-table pre-pass: imports from
+        notebooks are exceedingly rare in production, and supporting them
+        would require running ``load_notebook`` twice. The pre-pass *does*
+        include files the main scan would normally skip (``tests/``,
+        ``_TEST_*`` paths) — those files may still own a prompt constant
+        imported by a non-test module.
+        """
+        scan_root = target if target.is_dir() else target.parent
+        files: list[Path] = []
+        for path in scan_root.rglob("*.py"):
+            if any(part in _SKIP_DIRS for part in path.parts):
+                continue
+            files.append(path)
+        if not files:
+            return None
+        table = PackageSymbolTable.build(scan_root, files)
+        return ScanContext(symbol_table=table, scan_root=scan_root)
 
     def _iter_scannable_files(self, target: Path) -> Iterable[Path]:
         if target.is_file():

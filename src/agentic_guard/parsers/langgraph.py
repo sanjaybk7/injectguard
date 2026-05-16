@@ -57,7 +57,8 @@ class LangGraphParser(FrameworkParser):
         return any(any(imp.startswith(prefix) for prefix in _RELEVANT_IMPORT_PREFIXES) for imp in imports)
 
     def extract(self, path: Path, source: str, tree: ast.Module) -> tuple[list[Tool], list[Agent]]:
-        module_ctx = collect_module_context(tree)
+        cross_module = self.build_cross_module(path, tree)
+        module_ctx = collect_module_context(tree, cross_module=cross_module)
         visitor = _Visitor(path=path, taxonomy=self.taxonomy, module_ctx=module_ctx)
         visitor.visit(tree)
         return visitor.tools, visitor.agents
