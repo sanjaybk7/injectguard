@@ -1,16 +1,15 @@
-"""§4a (cross-function pollution, symbol-table edition) — review item #7.
+"""§4a (review item #4 — content-isolation variant).
 
-Both ``pkg_a`` and ``pkg_b`` contain a module named ``shared_name`` that
-exports a constant named ``PROMPT``. The two ``PROMPT`` values differ.
-The symbol table must keep them isolated: ``pkg_a.shared_name.PROMPT``
-must resolve to pkg_a's value, ``pkg_b.shared_name.PROMPT`` must resolve
-to pkg_b's value, and neither must bleed into the other's lookup.
+This agent imports ``PROMPT`` from ``pkg_a.shared_name``, where the
+value is a *dynamic* f-string and therefore not indexed as a literal
+by Fix 1's symbol-table. The cross-module lookup must return
+unresolved → IG002 fires.
 
-Expected: IG002 does NOT fire on either agent.
-
-(Failure mode this guards against: a "helpful" lookup that searches all
-modules with matching trailing names — which would resolve
-``shared_name.PROMPT`` to whichever was indexed last.)
+If isolation is broken and the symbol table returns ``pkg_b``'s literal
+in response to the ``pkg_a.shared_name.PROMPT`` lookup, IG002 would
+silently disappear from this agent. The test asserts the count on this
+file specifically; the symmetric pkg_b assertion confirms pkg_b's
+literal still resolves.
 """
 
 from agents import Agent, function_tool
