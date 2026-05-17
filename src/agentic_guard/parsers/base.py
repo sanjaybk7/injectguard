@@ -11,7 +11,6 @@ from agentic_guard.analysis.symbol_table import (
     CrossModuleResolver,
     PackageSymbolTable,
     build_resolver,
-    file_to_module_path,
 )
 from agentic_guard.ir import Agent, Tool
 from agentic_guard.taxonomy import Taxonomy
@@ -103,7 +102,7 @@ class FrameworkParser(ABC):
         ctx = self._active_scan_context
         if ctx is None:
             return None
-        mod_path = file_to_module_path(path, ctx.scan_root)
+        mod_path = ctx.symbol_table.module_path_for(path)
         if mod_path is None:
             return None
         return build_resolver(tree, file_module_path=mod_path, table=ctx.symbol_table)
