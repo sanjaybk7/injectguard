@@ -139,6 +139,10 @@ existing notebook fixtures and `tests/test_notebook.py` for examples.
 - Keep comments focused on *why*, not *what* — the code already shows what.
 - Don't add backwards-compat shims; v0 is alpha and we're free to refactor.
 - Don't introduce runtime dependencies beyond what the task requires.
+- When pasting GitHub URLs into review comments, follow
+  [`docs/REVIEW_PROTOCOL.md`](docs/REVIEW_PROTOCOL.md) — include the
+  full-SHA URL alongside the branch URL so reviewers' fetch tools
+  don't serve cached pre-change content.
 
 ---
 
