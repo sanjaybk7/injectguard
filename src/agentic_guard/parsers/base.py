@@ -140,6 +140,12 @@ def decorator_base_name(dec: ast.expr) -> str | None:
 
 def call_base_name(node: ast.Call) -> str | None:
     func = node.func
+    if isinstance(func, ast.Subscript):
+        # Generic-parameterized call: ``Agent[T](...)`` or ``mod.Agent[T](...)``.
+        # The OpenAI Agents SDK documents this as the canonical form for
+        # type-safe agents (``Agent`` is ``Generic[TContext]``). Unwrap one
+        # subscript level and let the existing Name/Attribute branches resolve.
+        func = func.value
     if isinstance(func, ast.Name):
         return func.id
     if isinstance(func, ast.Attribute):
