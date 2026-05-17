@@ -12,6 +12,7 @@ from agentic_guard.analysis.symbol_table import (
     PackageSymbolTable,
     Symbol,
     SymbolKind,
+    discover_package_roots,
     file_to_module_path,
     resolve_relative_module_path,
 )
@@ -22,6 +23,7 @@ __all__ = [
     "PackageSymbolTable",
     "Symbol",
     "SymbolKind",
+    "discover_package_roots",
     "file_to_module_path",
     "resolve_relative_module_path",
 ]
