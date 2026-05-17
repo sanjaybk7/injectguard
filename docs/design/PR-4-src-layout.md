@@ -175,14 +175,36 @@ files and picks the most-specific package root that contains each file
 
 The `.resolve()` call follows symlinks. A symlink at `src/pkg` pointing
 into `/elsewhere/` will be resolved to its physical location; if that
-location is outside the resolved `package_root`, the `relative_to()`
-guard rejects it and logs at debug level. Rationale: indexing files
-that don't physically live under the scan root makes module-path
-collision and de-duplication semantics ambiguous, and the most common
-real-world reason for an outbound symlink (a vendored package linked
-from elsewhere on disk) is precisely the case where you do *not* want
-the analyzer to also walk that other tree. If the user wants symlinked
-content scanned, they can run the scan against the real location.
+location is outside every discovered package root, the file is rejected
+during root-picking and a debug-level log fires naming the file and
+reason. Rationale: indexing files that don't physically live under the
+scan root makes module-path collision and de-duplication semantics
+ambiguous, and the most common real-world reason for an outbound
+symlink (a vendored package linked from elsewhere on disk) is precisely
+the case where you do *not* want the analyzer to also walk that other
+tree. If the user wants symlinked content scanned, they can run the
+scan against the real location.
+
+The log message preserves the substring `"not under package_root"` and
+includes the symlinked file path so the §4-test matcher (and any
+operator grep) keeps working regardless of which call site emits it.
+
+##### 1.2.1.1 Architecture amendment — log call-site relocation
+
+The original §1.2 code block showed `log.debug("skipping %s: not under
+package_root %s", file, package_root)` inside `file_to_module_path`'s
+`except ValueError` branch. Implementation revealed that
+`file_to_module_path(file, package_root: Path)` — by virtue of its
+single-root signature — cannot cleanly express "this file matches no
+root at all"; the path-computation function takes one root in and
+returns one module path out. Splitting root-discovery from
+path-computation produced a cleaner pipeline (`_pick_package_root_for`
+→ `file_to_module_path`), and the natural location for the
+symlink-escape log is the filter step where the rejection actually
+happens. The log substring and information content are preserved; only
+the call site moved. `file_to_module_path` retains the `except
+ValueError` branch (with its own debug log) for defensive reasons but
+no longer carries the symlink-policy contract.
 
 #### 1.2.2 Case sensitivity
 
@@ -387,6 +409,24 @@ If the implementation as actually written exceeds ~42 LOC, **I will
 pause and surface why before continuing.** The most likely overrun
 source remains multi-root conflict resolution per §2.3; if that grows,
 single-root-wins-by-precedence is the fallback.
+
+##### 3.1.1 Implementation outcome — pause-trigger fired, trimmed, accepted
+
+Implementation came in at ~54 LOC on the first pass, exceeding the ~42
+LOC pause-trigger. The overage was surfaced for explicit decision
+rather than absorbed silently. Trims (inline `_is_under` into its sole
+caller; compress the §2.3 in-code comment from 7 lines to 3 with a
+pointer back to this design doc; tighten `discover_package_roots`
+comprehensions) brought the final count to ~44 LOC. The remaining ~2
+LOC excess is attributed to multi-layout discovery (§4.3 `case_mixed`)
+and warning emission (§1.1.1 user-named-src + §1.2 orphan-init), both
+spec-required and non-removable without scope reduction.
+
+The pause-trigger functioned as designed: it surfaced the overshoot
+for explicit acceptance with documented rationale rather than letting
+scope creep accrue silently. Future PRs should treat this pattern as
+reusable — a trigger that produces a recorded decision is healthier
+than a trigger that produces a fight over rounding.
 
 **Out-of-scope guard:** this PR does NOT touch
 `CrossModuleResolver` or `build_resolver`. Per-file import resolution is
