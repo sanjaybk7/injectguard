@@ -189,6 +189,40 @@ The log message preserves the substring `"not under package_root"` and
 includes the symlinked file path so the §4-test matcher (and any
 operator grep) keeps working regardless of which call site emits it.
 
+##### 1.2.1.0 Python 3.13 default `rglob` behavior — directory vs file symlinks
+
+This design's escape-check covers files that **reach** our code via the
+`rglob("*.py")` iteration in `Scanner._build_scan_context`. Python's
+`rglob` semantics for symlinks changed across versions:
+
+* **Python 3.12 and earlier:** `rglob` walked into directory symlinks
+  by default. A symlink `pkg/linked → /elsewhere/` would surface every
+  `.py` file under `/elsewhere/` in the iteration, and our
+  escape-check would reject each at file-resolution time.
+* **Python 3.13:** `rglob` skips directory symlinks by default. The
+  `recurse_symlinks=True` parameter was added in 3.13
+  (<https://docs.python.org/3/library/pathlib.html#pathlib.Path.rglob>)
+  to opt back into 3.12 behavior. We do **not** opt in: walking into
+  directory symlinks risks infinite-loop on self-referential links and
+  needlessly indexes vendored code the user didn't intend to scan.
+
+The end-user-observable invariant — *outbound symlinks of any kind do
+not contribute files to the symbol table* — holds via two distinct
+mechanisms that compose:
+
+| Symlink kind | Skipped by | Escape-check log fires? |
+|---|---|---|
+| Directory symlink, outbound | Python 3.13 default `rglob` (iteration layer) | No (no code is invoked) |
+| File symlink, outbound | Our `_pick_package_root_for` escape-check | Yes |
+| Directory symlink, inbound (under scan root) | Walked normally | N/A (resolves under root) |
+| File symlink, inbound | Walked normally | N/A (resolves under root) |
+
+The §4-fixtures in `test_src_layout.py` test both mechanisms with two
+separate tests: one fixture uses a file symlink to verify the
+escape-check log (the mechanism), the other uses a directory symlink
+to verify the broader invariant (the policy outcome). Either test
+alone would have a blind spot for one mechanism.
+
 ##### 1.2.1.1 Architecture amendment — log call-site relocation
 
 The original §1.2 code block showed `log.debug("skipping %s: not under
