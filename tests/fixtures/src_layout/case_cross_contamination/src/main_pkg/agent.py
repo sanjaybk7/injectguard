@@ -1,13 +1,19 @@
-"""§4.6 — cross-contamination negative test.
+"""§4.6 — bidirectional cross-contamination negative test (review item #3).
 
 ``main_pkg/agent.py`` tries to import ``MAIN_PROMPT`` from its own
-``prompts`` module, which does NOT exist. The name ``MAIN_PROMPT`` *does*
-exist over in ``helpers/prompts.py``, but a name-anywhere fallback
-lookup would be a bug: imports are resolved by exact module path, not by
-name presence. IG002 must fire here.
+``prompts`` module, which DOES exist (``main_pkg/prompts.py``) but only
+defines ``HELPER_PROMPT``, not ``MAIN_PROMPT``. The name ``MAIN_PROMPT``
+exists over in ``helpers/prompts.py``; a name-anywhere fallback would
+resolve there and silence IG002. Conservative-on-doubt requires IG002
+to fire.
 
-If someone "helpfully" adds a fallback that searches every module for the
-name, this fixture catches it.
+Paired with ``helpers/agent.py`` (the symmetric direction: imports
+``HELPER_PROMPT`` from ``helpers.prompts``, where it isn't defined,
+while ``HELPER_PROMPT`` exists in ``main_pkg.prompts``).
+
+Expected: with both agents in this case-directory, IG002 fires twice
+(once per direction). The test asserts the count, not just presence —
+a single IG002 finding would mask either direction silently failing.
 """
 
 from agents import Agent, function_tool
@@ -21,7 +27,7 @@ def lookup(key: str) -> str:
 
 
 agent = Agent(
-    name="cross-contam-agent",
+    name="cross-contam-main-agent",
     instructions=MAIN_PROMPT,
     tools=[lookup],
     model="gpt-4o",

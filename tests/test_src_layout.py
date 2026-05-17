@@ -20,7 +20,6 @@ enumerated in the fixture-matrix sequencing message.
 from __future__ import annotations
 
 import logging
-import shutil
 import sys
 from pathlib import Path
 
@@ -40,41 +39,60 @@ def _rule_ids(target: Path) -> set[str]:
 
 def test_pure_src_resolves_cross_module() -> None:
     """§4.1 — ``src/my_pkg/`` imported as ``my_pkg``."""
-    assert "IG002" not in _rule_ids(FIXTURES / "case_pure_src")
+    assert "IG002" not in _rule_ids(FIXTURES / "case_pure_src"), (
+        "§4.1 pure-src cross-module resolution regressed"
+    )
 
 
 def test_pure_flat_remains_resolvable() -> None:
     """§4.2 — Fix 1's existing flat-layout behavior must not regress."""
-    assert "IG002" not in _rule_ids(FIXTURES / "case_pure_flat")
+    assert "IG002" not in _rule_ids(FIXTURES / "case_pure_flat"), (
+        "§4.2 flat-layout regression — Fix 1's existing behavior changed"
+    )
 
 
 def test_mixed_layout_resolves_both_roots() -> None:
     """§4.3 — both src-layout and flat-layout agents resolve in one scan."""
-    assert "IG002" not in _rule_ids(FIXTURES / "case_mixed")
+    assert "IG002" not in _rule_ids(FIXTURES / "case_mixed"), (
+        "§4.3 mixed-layout dual-root resolution regressed"
+    )
 
 
 def test_namespace_package_resolves_under_src_layout() -> None:
     """§4.4 — PEP 420 namespace package under ``src/`` (top-level)."""
-    assert "IG002" not in _rule_ids(FIXTURES / "case_namespace_pkg")
+    assert "IG002" not in _rule_ids(FIXTURES / "case_namespace_pkg"), (
+        "§4.4 top-level PEP 420 namespace package resolution regressed"
+    )
 
 
 def test_multi_pkg_src_layout_resolves_both_packages() -> None:
     """§4.5 — ``src/pkg_a/`` and ``src/pkg_b/`` resolve independently."""
-    assert "IG002" not in _rule_ids(FIXTURES / "case_multi_pkg_src")
+    assert "IG002" not in _rule_ids(FIXTURES / "case_multi_pkg_src"), (
+        "§4.5 multi-package src-layout resolution regressed"
+    )
 
 
 # -------- §4.6 cross-contamination negative test --------------------------
 
 
 def test_cross_contamination_does_not_silently_resolve() -> None:
-    """§4.6 — name exists in another package; must NOT bleed via fallback.
+    """§4.6 — bidirectional cross-contam (review item #3).
 
-    ``main_pkg/agent.py`` imports a name that exists only in ``helpers/``;
-    we treat the lookup as unresolved and IG002 fires. If this test
-    starts passing (IG002 silent), someone added a name-anywhere fallback
-    and that's a real bug.
+    Two agents, each importing a name that exists *only in the other
+    package*. Either direction silently resolving would be a bug.
+    The count check distinguishes "both directions fired IG002" from
+    "only one direction fired, the other silently resolved through a
+    fallback we don't want."
     """
-    assert "IG002" in _rule_ids(FIXTURES / "case_cross_contamination")
+    findings = Scanner(include_tests=True).scan(
+        FIXTURES / "case_cross_contamination"
+    ).findings
+    ig002 = [f for f in findings if f.rule_id == "IG002"]
+    assert len(ig002) == 2, (
+        f"§4.6 expected IG002 to fire in both directions "
+        f"(main_pkg→helpers and helpers→main_pkg); got {len(ig002)} IG002 "
+        f"findings: {[str(f.location.file) for f in ig002]}"
+    )
 
 
 # -------- Review-item fixtures --------------------------------------------
@@ -164,17 +182,104 @@ def test_nested_namespace_package_resolves_pep_420() -> None:
     Aligns with Python's runtime import system (PEP 420); contrasts with
     strict mypy / historical pylint. See §2.4 (nested branch).
     """
-    assert "IG002" not in _rule_ids(FIXTURES / "case_nested_namespace")
+    assert "IG002" not in _rule_ids(FIXTURES / "case_nested_namespace"), (
+        "§2.4 nested PEP 420 namespace package resolution regressed"
+    )
 
 
-def test_tests_subpkg_resolves_when_imported_from_production_code() -> None:
-    """Review item #4 — symbol-table pre-pass indexes ``my_pkg/tests/utils.py``.
+def test_tests_subpkg_dual_concern_symbol_table_indexes_rule_eval_skips(
+    tmp_path: Path,
+) -> None:
+    """Review item #4 — both halves of §2.7's dual-concern.
 
-    The Scanner's ``_is_test_path`` filter applies to rule evaluation, not
-    to symbol resolution. ``from my_pkg.tests.utils import UTIL_PROMPT``
-    must resolve cross-module.
+    §2.7 makes two claims about ``tests/`` directories:
+      1. The symbol-table pre-pass indexes ``.py`` files under ``tests/``
+         so production code can ``from my_pkg.tests.utils import X`` and
+         have it resolve.
+      2. The Scanner's ``_iter_scannable_files`` filter skips ``tests/``
+         from *rule evaluation* (independent of (1)).
+
+    Why this test builds the fixture in ``tmp_path`` instead of using a
+    committed fixture under ``tests/fixtures/``:
+
+    * The other ``test_*`` fixtures live under ``tests/fixtures/`` and
+      so the existing ``test_*`` calls pass ``include_tests=True`` to
+      bypass the outer ``tests/`` filter. But ``include_tests=True``
+      also bypasses the inner ``my_pkg/tests/`` filter that this test
+      needs to assert claim (2) on. A committed fixture cannot exercise
+      claim (2) under any flag combination.
+    * Building in ``tmp_path`` puts the fixture under a path with no
+      ``tests/`` ancestor, so ``include_tests=False`` (the default)
+      filters only the inner ``my_pkg/tests/`` content, exactly what
+      §2.7 describes.
+
+    Both claims are asserted on the same scan:
+      (1) ``main.py`` imports ``my_pkg.tests.utils.UTIL_PROMPT``; the
+          import must resolve cross-module (no IG002 on main.py).
+      (2) ``my_pkg/tests/vulnerable_fixture.py`` defines a real
+          confused-deputy agent (read_email source + send_email sink,
+          no gate). It must NOT fire IG001 because rule evaluation skips
+          ``tests/`` paths.
     """
-    assert "IG002" not in _rule_ids(FIXTURES / "case_tests_subpkg")
+    proj = tmp_path / "proj"
+    pkg = proj / "src" / "my_pkg"
+    tests_dir = pkg / "tests"
+    tests_dir.mkdir(parents=True)
+    (pkg / "__init__.py").touch()
+    (tests_dir / "__init__.py").touch()
+
+    # Test-tree utility module that production code imports from.
+    (tests_dir / "utils.py").write_text(
+        'UTIL_PROMPT = "Shared prompt utility that lives under my_pkg/tests/."\n'
+    )
+
+    # Production-path agent. Single tool (no source/sink pairing), so
+    # IG001 cannot fire here on its own; we are testing IG002 silence.
+    (pkg / "main.py").write_text(
+        "from agents import Agent, function_tool\n"
+        "from my_pkg.tests.utils import UTIL_PROMPT\n"
+        "@function_tool\n"
+        "def lookup(key: str) -> str:\n    return ''\n"
+        "agent = Agent(name='m', instructions=UTIL_PROMPT, tools=[lookup], model='gpt-4o')\n"
+    )
+
+    # Deliberate confused-deputy under tests/. Rule evaluation MUST skip
+    # this file; if it doesn't, IG001 will fire and the second assertion
+    # below will catch it.
+    (tests_dir / "vulnerable_fixture.py").write_text(
+        "from agents import Agent, function_tool\n"
+        "@function_tool\n"
+        "def read_email(message_id: str) -> str:\n    return ''\n"
+        "@function_tool\n"
+        "def send_email(to: str, body: str) -> str:\n    return ''\n"
+        "agent = Agent(\n"
+        "    name='vuln',\n"
+        "    instructions='static prompt',\n"
+        "    tools=[read_email, send_email],\n"
+        "    model='gpt-4o',\n"
+        ")\n"
+    )
+
+    # Default include_tests=False — the whole point of this test.
+    result = Scanner().scan(proj)
+    rule_ids = {f.rule_id for f in result.findings}
+
+    # Claim (1): cross-module resolution via the indexed tests/-subpkg.
+    assert "IG002" not in rule_ids, (
+        "§2.7 claim 1 regressed: symbol-table pre-pass must index files "
+        "under my_pkg/tests/ so that 'from my_pkg.tests.utils import "
+        "UTIL_PROMPT' resolves. IG002 firing here means the pre-pass "
+        "skipped tests/ along with rule evaluation, conflating the two "
+        "concerns."
+    )
+
+    # Claim (2): rule-evaluation skip on the deliberate vulnerable fixture.
+    assert "IG001" not in rule_ids, (
+        "§2.7 claim 2 regressed: rule evaluation must skip "
+        "my_pkg/tests/vulnerable_fixture.py because it sits under a "
+        "tests/ directory. IG001 firing here means the scanner is "
+        "evaluating tests/ content as production code."
+    )
 
 
 def test_src_as_package_warns_once_per_scan(
@@ -227,30 +332,42 @@ def test_src_orphan_init_emits_warning_and_package_still_resolves(
 
 
 def test_same_name_isolation_across_top_level_packages() -> None:
-    """Review item #7 — symbol-table isolation across sibling packages.
+    """Review item #7 — symbol-table isolation across sibling packages,
+    verified by content (review item #4 amendment).
 
     Two packages (``pkg_a`` and ``pkg_b``) each contain a module named
-    ``shared_name`` exporting a constant named ``PROMPT`` with different
-    values. Each agent must resolve its own package's constant; neither
-    must see the other.
+    ``shared_name`` exporting a name called ``PROMPT``. The values
+    differ in *kind*:
 
-    Failure mode this guards against: a "helpful" name-anywhere lookup
-    that resolves ``shared_name.PROMPT`` to whichever was indexed last.
+    * ``pkg_a.shared_name.PROMPT`` is a dynamic f-string → symbol table
+      does NOT index it → cross-module lookup returns unresolved →
+      IG002 fires on ``pkg_a/agent.py``.
+    * ``pkg_b.shared_name.PROMPT`` is a plain literal → symbol table
+      indexes it normally → cross-module lookup resolves → IG002 stays
+      silent on ``pkg_b/agent.py``.
+
+    The split assertions catch the precise failure mode that the
+    presence-only check would have missed: if isolation breaks and the
+    analyzer returns pkg_b's literal for pkg_a's lookup, IG002 would
+    silently disappear from pkg_a; conversely, returning pkg_a's
+    dynamic for pkg_b's lookup would flip pkg_b to firing. The two
+    counts catch both directions independently.
     """
-    assert "IG002" not in _rule_ids(FIXTURES / "case_same_name_isolation")
-
-
-# -------- Cleanup helpers -------------------------------------------------
-
-
-@pytest.fixture(autouse=True)
-def _scrub_pycache() -> None:
-    """Prevent ``__pycache__`` directories from accumulating in fixture trees.
-
-    Running these fixtures through ``ast.parse`` doesn't create bytecode
-    caches, but if a future test ever imports a fixture as a real
-    package, ``__pycache__`` could appear. Clean defensively.
-    """
-    yield
-    for cache in FIXTURES.rglob("__pycache__"):
-        shutil.rmtree(cache, ignore_errors=True)
+    findings = Scanner(include_tests=True).scan(
+        FIXTURES / "case_same_name_isolation"
+    ).findings
+    ig002 = [f for f in findings if f.rule_id == "IG002"]
+    pkg_a_findings = [f for f in ig002 if "pkg_a" in str(f.location.file)]
+    pkg_b_findings = [f for f in ig002 if "pkg_b" in str(f.location.file)]
+    assert len(pkg_a_findings) == 1, (
+        f"pkg_a's agent must fire IG002 (its PROMPT is a dynamic f-string). "
+        f"0 findings here would mean isolation is broken — the analyzer "
+        f"returned pkg_b's literal in response to pkg_a's lookup. "
+        f"Got {len(pkg_a_findings)} pkg_a findings."
+    )
+    assert len(pkg_b_findings) == 0, (
+        f"pkg_b's agent must NOT fire IG002 (its PROMPT is a plain literal). "
+        f"1 finding here would mean isolation is broken — the analyzer "
+        f"returned pkg_a's dynamic value in response to pkg_b's lookup. "
+        f"Got {len(pkg_b_findings)} pkg_b findings."
+    )
