@@ -101,26 +101,7 @@ graph: if both endpoints exist in the same agent's toolbox, assume the
 edge can be activated. The mitigation primitive — a human-approval gate
 on the sink — corresponds to a classical-taint sanitizer.
 
-### 3.3 Architectural information leakage (OWASP LLM07)
-
-Tool docstrings, names, and descriptions are visible to the LLM when it
-decides which tool to call. Secrets, internal hostnames, credential
-formats, or authentication instructions embedded in this metadata are
-leaked to the LLM, and through prompt injection or model extraction,
-potentially to attackers.
-
-**What `agentic-guard` will catch (IG004, planned):** docstrings and
-decorator-provided descriptions containing credential patterns (Bearer
-tokens, OpenAI-style `sk-*`, AWS access keys, PEM headers, JWTs),
-internal hostnames (RFC1918, `*.internal`, `*.corp`), database
-connection strings with embedded credentials, and authentication
-instructions ("the token is `X`", "authenticate using `Y`").
-
-**Status:** IG004 is a planned v0.2 rule; the threat model includes it
-because the document outlives the implementation timeline. See the
-v0.2 roadmap in [README.md](../README.md) for current status.
-
-### 3.4 Dynamic system-prompt injection (OWASP LLM01)
+### 3.3 Dynamic system-prompt injection (OWASP LLM01)
 
 The system prompt is the highest-trust slot in any LLM call. If it's
 built at runtime from user input or external data — an f-string with
@@ -203,12 +184,6 @@ The analyzer doesn't model attackers' attempts to reconstruct the LLM's
 training data or weights from query interactions. This is an AI-privacy
 concern, not an architectural-safety concern. Out of scope.
 
-### 4.10 Privacy leakage from training data
-
-If the LLM's training data contained PII that the LLM regurgitates in
-response to adversarial queries, that's a model-provider concern, not
-an architectural one. Out of scope.
-
 ---
 
 ## 5. Attacker capability assumptions
@@ -259,11 +234,15 @@ This is the same modeling assumption that makes classical buffer
 overflow analysis conservative: we don't assume the attacker can't
 craft the right input; we assume they can.
 
-### 5.5 Attacker may be present in the LLM provider supply chain
+### 5.5 We do not rely on the LLM provider's built-in defenses
 
-The provider's safety classifiers, fine-tuning, and RLHF defenses are
-modeled as best-effort, not as guarantees. If the LLM is treated as
-adversarial, this assumption follows naturally.
+The provider's safety classifiers, fine-tuning, and RLHF alignment are
+not counted as part of our threat-model coverage. If those defenses
+fail — whether through adversarial inputs that bypass them, training-
+time issues, or supply-chain compromise — the analyzer's claims should
+still hold. This follows from §5.4 (the LLM is treated as
+adversarially-routed) and is restated here so it isn't accidentally
+elided by a reader who reads §5 alone.
 
 ### 5.6 Attacker does NOT have
 
@@ -418,7 +397,7 @@ file as security-sensitive in your VCS (require reviews on changes).
 |---|---|---|
 | **OWASP LLM Top 10** (2025 edition) | Application-level LLM risks: LLM01 (prompt injection), LLM02 (insecure output handling), LLM06 (sensitive info disclosure), LLM07 (insecure plugin design), LLM08 (excessive agency) | We catch LLM01, LLM06, LLM07, LLM08 patterns at design-time. Not all instances; not exhaustively. |
 | **Meta LlamaFirewall** | Runtime sandbox for tool calls: argument scrubbing, capability enforcement, output redaction | Complementary. We surface designs that *can* be sandboxed; they enforce the sandbox at runtime. |
-| **TAINTAWI** (academic, 2024) | Formal taint-analysis for LLM agents using SMT solving | Aspirational. We approximate the same intent with a fast static check; TAINTAWI proves; we surface. |
+| The **formal taint-analysis line of research** for agentic workflows (TAINTAWI and successors) | Provable absence of taint flows in LLM-agent code using SMT-style techniques | Aspirational. We approximate the same intent with a fast static check; formal methods prove; we surface. |
 | **Microsoft Prompt Shields** | Classifier-based input/output filtering | Different layer. They catch payloads at runtime; we catch architectures that admit payloads at design time. |
 | **Simon Willison's prompt-injection writing** (informal canonical reference) | Conceptual framing of indirect prompt injection as the dominant LLM-security failure mode | We operationalize the framing into static checks. The "Markdown image exfil" example from his blog is a direct case our IG001 catches when the relevant tool is in scope. |
 
@@ -430,15 +409,21 @@ This document is **versioned with the analyzer**. v0.2 reflects the
 post-Fix-1 / post-PR-#4 state. Anticipated changes:
 
 - **v0.3** will add: IG003 (library-call rule) → §3.1 coverage expands;
-  IG004 (architectural-leak rule) → §3.3 moves from "planned" to
-  "covered"; PR #5 (function-local binding) → §7.5 removed.
+  IG004 (architectural-leak rule) → a new §3 entry opens to cover
+  *architectural information leakage* (sensitive content in tool
+  docstrings / decorator descriptions visible to the LLM: credential
+  patterns, internal hostnames, auth instructions, embedded connection
+  strings); PR #5 (function-local literal binding) → §7.5 removed.
 - **v0.4 or later**: CrewAI / MCP / Microsoft Agent Framework parsers
   → §3 coverage extends to those ecosystems; multi-agent attack
   patterns may move from §7.8 to §3.
 
-When a new rule lands, the corresponding §3 entry is updated *and* the
-matching §7 limitation is moved out. We do not let coverage claims
-drift ahead of implementation.
+When a new rule lands, the corresponding §3 entry is added *and* the
+matching §7 limitation is moved out — in the same PR. We do not let
+coverage claims drift ahead of implementation; equally, we do not
+claim future coverage in the present-tense sections of this document.
+This v0.2 revision deliberately removed a forward-referenced §3.3
+(IG004) for that reason.
 
 ---
 
@@ -459,8 +444,9 @@ version of this document.
   systems framing this analyzer's IG001 rule descends from.
 - **Simon Willison's prompt-injection writing:**
   <https://simonwillison.net/tags/prompt-injection/>
-- **TAINTAWI (Wang et al., 2024):** formal taint-analysis for LLM
-  agents.
+- **The formal taint-analysis line of research for agentic workflows**
+  (TAINTAWI and successors): provable absence of taint flows in
+  LLM-agent code.
 - **Meta LlamaFirewall (paper + release):** runtime sandboxing for
   agent tool calls.
 - **`docs/HOW_IT_WORKS.md`:** the analyzer's architecture, rule design,
