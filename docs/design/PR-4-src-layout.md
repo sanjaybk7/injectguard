@@ -82,6 +82,7 @@ permissive correct rule.
 Cases the detection covers:
 - `src/<pkg>/__init__.py` — classic single-package src-layout
 - `src/<pkg>/*.py` (no `__init__.py`) — PEP 420 namespace package
+  (see §2.4 for the resolution semantics that apply after detection)
 - `src/<pkg_a>/`, `src/<pkg_b>/` — multi-package src-layout
 - `src/<pkg>/<sub>/` with deeply-nested .py files — still detected via the
   one-level scan
@@ -254,8 +255,12 @@ distributable package.** Document in a comment; surface as a
 detection) and nested (within-package) levels.
 
 **Top-level:** detection rule in §1.1 looks for `.py` files, not
-`__init__.py`. `src/<pkg>/foo.py` with no `__init__.py` anywhere triggers
-src-layout normally.
+`__init__.py` (see §1.1's "Cases the detection covers" enumeration, the
+``src/<pkg>/*.py (no __init__.py)`` bullet). `src/<pkg>/foo.py` with no
+`__init__.py` anywhere triggers src-layout normally. §2.4 governs the
+*resolution semantics* (runtime-vs-strict-mode) that apply once §1.1's
+detection has picked the layout up; the two sections are deliberately
+split between detection (§1.1) and resolution (§2.4).
 
 **Nested:** a directory at `src/pkg/sub/` containing `.py` files but no
 `__init__.py` resolves as `pkg.sub` — `file_to_module_path` never reads
