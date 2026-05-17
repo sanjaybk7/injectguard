@@ -49,7 +49,7 @@ to fix.
 
 Severity is scored on the sink's privilege × reversibility × source trust. The
 classification of which tools are sources vs sinks lives in
-[`src/agentic-guard/taxonomy.yaml`](src/agentic-guard/taxonomy.yaml) and is community-extensible.
+[`src/agentic_guard/taxonomy.yaml`](src/agentic_guard/taxonomy.yaml) and is community-extensible.
 
 ---
 
@@ -129,7 +129,7 @@ honest limitations, is in [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md).
 
 ---
 
-## What InjectGuard is *not*
+## What `agentic-guard` is *not*
 
 Being honest about scope matters more than overselling. This tool:
 
@@ -139,10 +139,6 @@ Being honest about scope matters more than overselling. This tool:
   not what's inside tool function bodies. A function named `process()` whose body
   calls `smtplib.send()` is currently invisible to the tool — names matter, just
   as they do for `bandit`, ESLint, and Semgrep. (See roadmap for IG003.)
-- **Is not a cross-module analyzer.** It resolves intra-module string constants
-  (so `instructions=PROMPT` where `PROMPT = "..."` lives in the same file is
-  treated as static), but doesn't follow imports across files. Constants imported
-  from other modules will currently flag IG002 as a likely false positive.
 - **Does not support TypeScript-based agent frameworks** at v0. Python-only.
 - **Does not execute, evaluate, or send your code anywhere.** All analysis is
   local and deterministic.
@@ -167,11 +163,18 @@ Driven by community feedback after v0 launch.
 - **IG003 — library-call rule.** Walk inside tool function bodies for known-dangerous
   calls (`smtplib.send_message`, `subprocess.run`, `requests.post`, `boto3.client('ses')`,
   etc.) so tools with neutral names but dangerous bodies get caught.
-- **Cross-module import resolution** for constants used as prompts.
 - **Microsoft Agent Framework** parser (Python).
 - **MCP server** parser.
 - **`agentic-guard init`** — interactive command to add project-local taxonomy entries
   for unfamiliar tool names.
+
+### Shipped in v0.2
+
+- **Cross-module import resolution** for constants used as prompts. `from
+  prompts import SYSTEM_PROMPT` (and relative, aliased, star, and
+  attribute-access variants) no longer fires IG002 when the imported name
+  resolves to a literal in a sibling module. See
+  [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md#cross-module-resolution).
 
 ---
 
@@ -179,9 +182,9 @@ Driven by community feedback after v0 launch.
 
 Contributions very welcome — especially:
 
-- **New taxonomy entries.** Edit `src/agentic-guard/taxonomy.yaml` to add tool-name
+- **New taxonomy entries.** Edit `src/agentic_guard/taxonomy.yaml` to add tool-name
   patterns we don't recognize yet.
-- **New rules.** Subclass `Rule` in `src/agentic-guard/rules/`.
+- **New rules.** Subclass `Rule` in `src/agentic_guard/rules/`.
 - **New parsers.** Add a `FrameworkParser` for a framework we don't support.
 
 See [CONTRIBUTING.md](CONTRIBUTING.md).
