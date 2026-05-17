@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import logging
 import shutil
+import sys
 from pathlib import Path
 
 import pytest
@@ -79,6 +80,10 @@ def test_cross_contamination_does_not_silently_resolve() -> None:
 # -------- Review-item fixtures --------------------------------------------
 
 
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="symlink creation requires SeCreateSymbolicLinkPrivilege on Windows",
+)
 def test_symlink_escape_does_not_index_outside_scan_root(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
@@ -118,12 +123,29 @@ def test_symlink_escape_does_not_index_outside_scan_root(
         "in-scan-root literal should resolve; symlink-escape should not affect it"
     )
 
-    # The symlinked external file should be skipped with a debug message.
-    skip_msgs = [
-        r for r in caplog.records
-        if "not under package_root" in r.message or "skipping" in r.message
-    ]
-    assert skip_msgs, "expected debug log for symlink-escape skip"
+    # The symlinked external file should be skipped with a debug message
+    # matching the §1.2 format: log.debug("skipping %s: not under package_root %s", ...)
+    # We match strictly on "not under package_root" so a future regression that
+    # breaks symlink-escape (while leaving the orphan __init__.py skip working)
+    # still fails this test instead of catching the orphan log incidentally.
+    matching = [r for r in caplog.records if "not under package_root" in r.message]
+    assert matching, (
+        "expected debug log matching §1.2 'not under package_root' format "
+        "for symlink-escape skip"
+    )
+
+    # The matched record must reference the actual symlinked file or the
+    # external target; a generic "not under package_root" log against an
+    # unrelated path would silently pass without this check.
+    assert any(
+        "linked_external" in r.message
+        or "leaked.py" in r.message
+        or "external_pkg" in r.message
+        for r in matching
+    ), (
+        "symlink-skip log must reference the symlinked file path or external "
+        "target; got messages: " + repr([r.message for r in matching])
+    )
 
 
 def test_case_sensitivity_does_not_match_across_case() -> None:
