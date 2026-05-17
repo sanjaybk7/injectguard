@@ -127,6 +127,12 @@ for build/install instructions.
 A longer technical writeup, including the taint-analysis adaptation and
 honest limitations, is in [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md).
 
+**Security researchers and OWASP contributors:** the formal threat
+model — what we defend against, what we explicitly do not, our
+attacker capability assumptions, and our coverage gaps — is in
+[`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md). Read that before
+filing a "missed attack class" issue.
+
 ---
 
 ## What `agentic-guard` is *not*

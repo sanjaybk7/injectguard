@@ -358,6 +358,12 @@ single page of code — rather than building an opaque scoring engine.
 These are the sharp edges. Knowing them is what separates real engineers
 from people selling magic.
 
+> **For a structured treatment of what the analyzer covers vs. doesn't,
+> the attacker capabilities we assume, and the threat-model boundary
+> conditions, see [`THREAT_MODEL.md`](THREAT_MODEL.md). This section
+> covers implementation-level limitations specifically; the threat model
+> covers the conceptual scope.**
+
 ### Names are the contract
 
 The taxonomy classifies tools by their *names* and *docstrings*, not by what
