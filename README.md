@@ -1,7 +1,8 @@
 # agentic-guard
 
-> Static analyzer for prompt-injection and confused-deputy risks in LLM agent code.
-> The missing `bandit`/`semgrep` for AI agents.
+> Static analyzer for confused-deputy and prompt-injection risks in
+> LLM agent code. Models the LLM as an adversarially-controlled edge
+> in the data-flow graph.
 
 [![CI](https://github.com/sanjaybk7/agentic-guard/actions/workflows/ci.yml/badge.svg)](https://github.com/sanjaybk7/agentic-guard/actions/workflows/ci.yml)
 [![PyPI](https://img.shields.io/pypi/v/agentic-guard.svg)](https://pypi.org/project/agentic-guard/)
@@ -127,6 +128,12 @@ for build/install instructions.
 A longer technical writeup, including the taint-analysis adaptation and
 honest limitations, is in [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md).
 
+**Security researchers and OWASP contributors:** the formal threat
+model — what we defend against, what we explicitly do not, our
+attacker capability assumptions, and our coverage gaps — is in
+[`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md). Read that before
+filing a "missed attack class" issue.
+
 ---
 
 ## What `agentic-guard` is *not*
@@ -147,12 +154,12 @@ Being honest about scope matters more than overselling. This tool:
 
 ## Real-world validation
 
-Scanned 9 popular open-source agent codebases (LangChain, LangGraph, OpenAI Agents
-SDK, OpenAI Cookbook, GenAI_Agents, etc.) covering ~3,000 Python files and notebook
-cells. Surfaced 22 prompt-injection patterns, all in `examples/` and `tutorial/`
-code that developers actively copy from. Findings were not publicly disclosed against
-specific repos; this is intended to be reported responsibly to maintainers as we
-go.
+`agentic-guard` is scanned against a 9-repository corpus of popular
+open-source agent codebases. Per-repository finding counts and
+methodology are in [`docs/eval/PR-4-corpus-results.md`](docs/eval/PR-4-corpus-results.md).
+Full precision/recall measurement is on the v0.2 roadmap; see PR #5
+(function-local literal binding) and IG003 (library-call rule) for
+the next planned reductions in false-positive rate.
 
 ---
 
@@ -170,11 +177,17 @@ Driven by community feedback after v0 launch.
 
 ### Shipped in v0.2
 
-- **Cross-module import resolution** for constants used as prompts. `from
-  prompts import SYSTEM_PROMPT` (and relative, aliased, star, and
-  attribute-access variants) no longer fires IG002 when the imported name
-  resolves to a literal in a sibling module. See
+- **Cross-module string-constant resolution** — `from prompts import
+  SYSTEM_PROMPT` and related patterns no longer fire IG002 when the
+  imported name resolves to a literal in a sibling module. See
   [`docs/HOW_IT_WORKS.md`](docs/HOW_IT_WORKS.md#cross-module-resolution).
+- **OpenAI Agents SDK `Agent[T](...)` generic-subscript syntax** —
+  typed-context agents (the SDK's documented recommended form) are now
+  recognized by the parser.
+- **src-layout package normalization** — projects using the modern
+  `src/<pkg>/` layout (PEP 517/518 era convention) resolve cross-module
+  references correctly. See [`docs/design/PR-4-src-layout.md`](docs/design/PR-4-src-layout.md).
+- **Threat model documentation** — see [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md).
 
 ---
 
