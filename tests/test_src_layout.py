@@ -102,17 +102,21 @@ def test_cross_contamination_does_not_silently_resolve() -> None:
     sys.platform == "win32",
     reason="symlink creation requires SeCreateSymbolicLinkPrivilege on Windows",
 )
-def test_symlink_escape_does_not_index_outside_scan_root(
+def test_file_symlink_escape_emits_log_and_does_not_index(
     tmp_path: Path,
     caplog: pytest.LogCaptureFixture,
 ) -> None:
-    """Review item #1 — symlink containment.
+    """Review item #1 — symlink containment via the escape-check **mechanism**.
 
-    Construct a temporary scan root containing a normal package and a
-    symlink whose target is *outside* the scan root. The symlinked file
-    must not appear in the symbol table, and a debug log line records
-    the skip. The fixture is built at test time because committed
-    symlinks pointing to absolute or never-existing paths are fragile.
+    Uses a **file symlink** (not a directory symlink) because Python 3.13's
+    default ``rglob`` skips directory symlinks at the iteration layer —
+    those are tested separately in
+    ``test_directory_symlink_outbound_contributes_no_files_to_symbol_table``
+    for the broader **policy outcome**. File symlinks are walked normally
+    by ``rglob`` regardless of Python version, so this fixture is the
+    correct shape to exercise ``_pick_package_root_for``'s escape-check
+    log path (§1.2.1.0 in the design doc breaks down which mechanism
+    catches which symlink kind).
     """
     proj = tmp_path / "proj"
     pkg = proj / "src" / "my_pkg"
@@ -127,11 +131,14 @@ def test_symlink_escape_does_not_index_outside_scan_root(
         "agent = Agent(name='sl', instructions=LOCAL_PROMPT, tools=[lookup], model='gpt-4o')\n"
     )
 
-    # External directory and a symlink into it from within the scan root.
+    # External file (not directory) and a file-level symlink into it.
+    # rglob walks file symlinks regardless of Python version, so the
+    # escape-check code path is reliably exercised.
     external = tmp_path / "external_pkg"
     external.mkdir()
-    (external / "leaked.py").write_text('LEAKED = "must not be indexed"\n')
-    (pkg / "linked_external").symlink_to(external)
+    leaked = external / "leaked.py"
+    leaked.write_text('LEAKED = "must not be indexed"\n')
+    (pkg / "leaked_link.py").symlink_to(leaked)
 
     with caplog.at_level(logging.DEBUG, logger="agentic_guard.analysis.symbol_table"):
         result = Scanner(include_tests=True).scan(proj)
@@ -142,10 +149,10 @@ def test_symlink_escape_does_not_index_outside_scan_root(
     )
 
     # The symlinked external file should be skipped with a debug message
-    # matching the §1.2 format: log.debug("skipping %s: not under package_root %s", ...)
-    # We match strictly on "not under package_root" so a future regression that
-    # breaks symlink-escape (while leaving the orphan __init__.py skip working)
-    # still fails this test instead of catching the orphan log incidentally.
+    # matching the §1.2 format. We match strictly on "not under package_root"
+    # so a future regression that breaks symlink-escape (while leaving the
+    # orphan __init__.py skip working) still fails this test instead of
+    # catching the orphan log incidentally.
     matching = [r for r in caplog.records if "not under package_root" in r.message]
     assert matching, (
         "expected debug log matching §1.2 'not under package_root' format "
@@ -156,13 +163,85 @@ def test_symlink_escape_does_not_index_outside_scan_root(
     # external target; a generic "not under package_root" log against an
     # unrelated path would silently pass without this check.
     assert any(
-        "linked_external" in r.message
+        "leaked_link" in r.message
         or "leaked.py" in r.message
         or "external_pkg" in r.message
         for r in matching
     ), (
         "symlink-skip log must reference the symlinked file path or external "
         "target; got messages: " + repr([r.message for r in matching])
+    )
+
+
+@pytest.mark.skipif(
+    sys.platform == "win32",
+    reason="symlink creation requires SeCreateSymbolicLinkPrivilege on Windows",
+)
+def test_directory_symlink_outbound_contributes_no_files_to_symbol_table(
+    tmp_path: Path,
+) -> None:
+    """Verifies the end-user **invariant** that outbound directory symlinks
+    do not contribute files to the symbol table. This holds via Python
+    3.13's default ``rglob`` behavior (which skips directory symlinks at
+    iteration), independently of our escape-check code path. Do NOT add
+    an escape-check log assertion here — the log won't fire because no
+    code is invoked for skipped iteration entries. See
+    ``test_file_symlink_escape_emits_log_and_does_not_index`` for
+    escape-check log verification on file symlinks.
+
+    Together with the file-symlink test, this confirms the invariant
+    holds via two distinct mechanisms (iteration-level skip for
+    directories, escape-check for files); either test alone has a blind
+    spot for one mechanism. §1.2.1.0 in the design doc tabulates which
+    mechanism catches which symlink kind.
+    """
+    proj = tmp_path / "proj"
+    pkg = proj / "src" / "my_pkg"
+    pkg.mkdir(parents=True)
+    (pkg / "__init__.py").touch()
+    (pkg / "prompts.py").write_text('LOCAL_PROMPT = "inside the scan root"\n')
+    (pkg / "agent.py").write_text(
+        "from agents import Agent, function_tool\n"
+        "from my_pkg.prompts import LOCAL_PROMPT\n"
+        "@function_tool\n"
+        "def lookup(key: str) -> str:\n    return ''\n"
+        "agent = Agent(name='sl', instructions=LOCAL_PROMPT, tools=[lookup], model='gpt-4o')\n"
+    )
+
+    # Directory symlink to an outbound location containing .py files.
+    external = tmp_path / "external_pkg"
+    external.mkdir()
+    (external / "leaked.py").write_text('LEAKED = "must not be indexed"\n')
+    (external / "deeper").mkdir()
+    (external / "deeper" / "also_leaked.py").write_text('ALSO = "must not be indexed"\n')
+    (pkg / "linked_external").symlink_to(external)
+
+    result = Scanner(include_tests=True).scan(proj)
+
+    # In-tree literal must resolve as usual.
+    assert "IG002" not in {f.rule_id for f in result.findings}, (
+        "in-scan-root literal should resolve; directory-symlink presence "
+        "should not affect it"
+    )
+
+    # The symbol table must NOT contain any module whose physical file
+    # lives under the external directory. We check by inspecting the
+    # table directly — the policy outcome is "zero contribution," and
+    # any contribution (even a single one) is a violation regardless of
+    # whether log signals fire.
+    ctx = Scanner(include_tests=True)._build_scan_context(proj)
+    assert ctx is not None, "scan_context should be built for a non-empty scan root"
+    external_resolved = external.resolve()
+    leaked_modules = [
+        (mod_path, sym.file_path)
+        for mod_path, sym in ctx.symbol_table.modules.items()
+        if external_resolved in sym.file_path.resolve().parents
+        or sym.file_path.resolve() == external_resolved / "leaked.py"
+        or sym.file_path.resolve() == external_resolved / "deeper" / "also_leaked.py"
+    ]
+    assert not leaked_modules, (
+        f"directory-symlink contributed files to the symbol table — "
+        f"invariant violated: {leaked_modules}"
     )
 
 
