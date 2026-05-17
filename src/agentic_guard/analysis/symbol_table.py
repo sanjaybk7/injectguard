@@ -25,10 +25,13 @@ Design rules (all conservative-on-doubt):
 from __future__ import annotations
 
 import ast
+import logging
 from collections.abc import Iterable
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
+
+log = logging.getLogger(__name__)
 
 
 class SymbolKind(StrEnum):
@@ -67,24 +70,43 @@ class PackageSymbolTable:
     """Symbol table for every .py file under a scan root."""
 
     scan_root: Path
+    package_roots: list[Path] = field(default_factory=list)
     modules: dict[str, ModuleSymbols] = field(default_factory=dict)  # by dotted path
     by_file: dict[Path, ModuleSymbols] = field(default_factory=dict)
 
     @classmethod
     def build(cls, scan_root: Path, files: Iterable[Path]) -> PackageSymbolTable:
-        table = cls(scan_root=scan_root)
+        roots = discover_package_roots(scan_root)
+        table = cls(scan_root=scan_root, package_roots=roots)
+        # Pre-compute most-specific package_root per file (single pass).
+        file_to_root: dict[Path, Path] = {}
         for f in files:
             if f.suffix != ".py":
                 continue
-            mod_path = file_to_module_path(f, scan_root)
-            if mod_path is None:
-                continue
-            symbols = _scan_module(f, mod_path)
-            if symbols is None:
-                continue
-            table.modules[mod_path] = symbols
-            table.by_file[f] = symbols
+            best = _pick_package_root_for(f, roots)
+            if best is not None:
+                file_to_root[f] = best
+        # §2.3 conflict resolution: iterate roots in low-to-high precedence
+        # order; on key collision the src-layout entry overwrites the flat
+        # one. See §2.3 in PR-4-src-layout.md for full rationale.
+        for pkg_root in roots:
+            for f, root in file_to_root.items():
+                if root != pkg_root:
+                    continue
+                mod_path = file_to_module_path(f, pkg_root)
+                if mod_path is None:
+                    continue
+                symbols = _scan_module(f, mod_path)
+                if symbols is None:
+                    continue
+                table.modules[mod_path] = symbols
+                table.by_file[f] = symbols
         return table
+
+    def module_path_for(self, file: Path) -> str | None:
+        """Dotted module path for ``file`` per the discovered package roots."""
+        pkg_root = _pick_package_root_for(file, self.package_roots)
+        return file_to_module_path(file, pkg_root) if pkg_root else None
 
 
 @dataclass
@@ -154,17 +176,65 @@ class CrossModuleResolver:
 # ---------- file-path / module-path helpers --------------------------------
 
 
-def file_to_module_path(file: Path, scan_root: Path) -> str | None:
-    """Return a dotted module path for ``file`` relative to ``scan_root``.
+def discover_package_roots(scan_root: Path) -> list[Path]:
+    """Return the package roots from which module paths are computed.
 
-    ``__init__.py`` collapses to its directory. Files outside ``scan_root``
-    return ``None`` (cross-module resolution cannot reach them).
+    Pure flat → ``[scan_root]``. Pure src → ``[scan_root/src]``. Mixed →
+    ``[scan_root, scan_root/src]`` in low-to-high precedence order so
+    src-layout wins on key collisions per §2.3. Also emits §1.1.1's
+    user-named-src warning when ``src/__init__.py`` exists but src-layout
+    detection rejects (no subdir contains ``.py`` files).
+    """
+    src = scan_root / "src"
+    def _has_py_pkg(d: Path) -> bool:
+        return d.is_dir() and any(c.is_dir() and any(c.rglob("*.py")) for c in d.iterdir())
+    if not _has_py_pkg(src):
+        if (src / "__init__.py").exists():
+            log.warning("flat-layout detected with top-level package literally named 'src'; this is unusual and may indicate a project misconfiguration")
+        return [scan_root]
+    has_root_pkg = any(
+        c.is_dir() and c.name != "src" and any(c.rglob("*.py")) for c in scan_root.iterdir()
+    )
+    return [scan_root, src] if has_root_pkg else [src]
+
+
+def _pick_package_root_for(file: Path, roots: list[Path]) -> Path | None:
+    """Return the most-specific root containing ``file``; log+None on symlink-escape (§1.2.1)."""
+    file_r = file.resolve()
+    matching = []
+    for r in roots:
+        try:
+            file_r.relative_to(r.resolve())
+            matching.append(r)
+        except ValueError:
+            pass
+    if not matching:
+        log.debug("skipping %s: not under package_root %s", file, roots)
+        return None
+    return max(matching, key=lambda r: len(r.resolve().parts))
+
+
+def file_to_module_path(file: Path, package_root: Path) -> str | None:
+    """Return a dotted module path for ``file`` relative to ``package_root``.
+
+    ``__init__.py`` collapses to its directory. Files whose resolved path
+    escapes ``package_root`` (e.g. symlinks pointing outside the scan root,
+    per §1.2.1) are skipped with a debug log. An orphan ``__init__.py``
+    at the package root itself (parts == ["__init__"]) is skipped with a
+    warning per §1.1.1 (mixed orphan case).
+
+    Module-path comparison is case-sensitive in both directions, mirroring
+    Python's import system regardless of filesystem case-sensitivity (§1.2.2).
     """
     try:
-        rel = file.resolve().relative_to(scan_root.resolve())
+        rel = file.resolve().relative_to(package_root.resolve())
     except ValueError:
+        log.debug("skipping %s: not under package_root %s", file, package_root)
         return None
     parts = list(rel.with_suffix("").parts)
+    if parts == ["__init__"]:
+        log.warning("orphan __init__.py at package root %s; skipping", file)
+        return None
     if parts and parts[-1] == "__init__":
         parts.pop()
     return ".".join(parts) if parts else None
